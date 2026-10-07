@@ -3,7 +3,6 @@
 import json
 from pathlib import Path
 from datetime import datetime
-from collections import defaultdict
 
 
 ACTIVITY_LOG_DIR = Path(__file__).with_name("activity_logs")
@@ -46,8 +45,15 @@ def get_student_activities(student_nickname: str, limit: int = 20) -> list:
     if not log_file.exists():
         return []
 
-    activities = json.loads(log_file.read_text(encoding="utf-8"))
-    return activities[-limit:][::-1]  # 최신순으로 정렬
+    try:
+        activities = json.loads(log_file.read_text(encoding="utf-8"))
+        recent = activities[-limit:] if len(activities) > limit else activities
+        result = []
+        for i in range(len(recent) - 1, -1, -1):
+            result.append(recent[i])
+        return result
+    except:
+        return []
 
 
 def get_all_students_latest_activity() -> dict:
@@ -70,34 +76,34 @@ def get_leaderboard() -> list:
     """전체 학생 순위표 (XP 기준)"""
     init_activity_log()
 
-    # 각 학생별 최근 활동에서 레벨 정보 추출
     leaderboard = []
 
     for log_file in ACTIVITY_LOG_DIR.glob("*_activities.json"):
         student_nickname = log_file.stem.replace("_activities", "")
-        activities = json.loads(log_file.read_text(encoding="utf-8"))
+        try:
+            activities = json.loads(log_file.read_text(encoding="utf-8"))
+        except:
+            continue
 
-        # 가장 최신의 XP 정보 찾기
         xp = 0
         solved = 0
         last_activity = None
 
-        for activity in reversed(activities):
+        for i in range(len(activities) - 1, -1, -1):
+            activity = activities[i]
             if activity.get("type") in ["problem_solved", "level_up"]:
                 last_activity = activity
-                if "xp" in activity.get("details", {}):
-                    xp = activity["details"]["xp"]
-                if "solved" in activity.get("details", {}):
-                    solved = activity["details"]["solved"]
+                xp = activity.get("details", {}).get("xp", 0)
+                solved = activity.get("details", {}).get("solved", 0)
                 break
 
-        if last_activity:
+        if xp > 0:
             leaderboard.append({
                 "student": student_nickname,
                 "xp": xp,
                 "solved": solved,
-                "last_activity": last_activity["timestamp"],
-                "activity_type": last_activity["type"],
+                "last_activity": last_activity.get("timestamp", "") if last_activity else "",
+                "activity_type": last_activity.get("type", "") if last_activity else "",
             })
 
     return sorted(leaderboard, key=lambda x: x["xp"], reverse=True)

@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from datetime import datetime
 
 import streamlit as st
 
@@ -9,8 +10,76 @@ import ai_helper
 import auth
 import survey
 import dashboard
-import activity_log
 from learning_paths import LearningPath, Mastery, TOPIC_BY_ID
+
+# ========== 활동 로깅 함수 ==========
+ACTIVITY_LOG_DIR = Path(__file__).with_name("activity_logs")
+
+def init_activity_log():
+    ACTIVITY_LOG_DIR.mkdir(exist_ok=True)
+
+def log_activity(student_nickname: str, activity_type: str, details: dict):
+    init_activity_log()
+    log_file = ACTIVITY_LOG_DIR / f"{student_nickname}_activities.json"
+    activities = json.loads(log_file.read_text(encoding="utf-8")) if log_file.exists() else []
+    activities.append({"timestamp": datetime.now().isoformat(), "type": activity_type, "details": details})
+    log_file.write_text(json.dumps(activities, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def get_all_students_latest_activity() -> dict:
+    init_activity_log()
+    result = {}
+    for log_file in ACTIVITY_LOG_DIR.glob("*_activities.json"):
+        student_nickname = log_file.stem.replace("_activities", "")
+        activities = json.loads(log_file.read_text(encoding="utf-8"))
+        if activities:
+            result[student_nickname] = activities[-1]
+    return result
+
+def get_leaderboard() -> list:
+    init_activity_log()
+    leaderboard = []
+    for log_file in ACTIVITY_LOG_DIR.glob("*_activities.json"):
+        student_nickname = log_file.stem.replace("_activities", "")
+        try:
+            activities = json.loads(log_file.read_text(encoding="utf-8"))
+        except:
+            continue
+        xp, solved, last_activity = 0, 0, None
+        for i in range(len(activities) - 1, -1, -1):
+            activity = activities[i]
+            if activity.get("type") in ["problem_solved", "level_up"]:
+                last_activity = activity
+                xp = activity.get("details", {}).get("xp", 0)
+                solved = activity.get("details", {}).get("solved", 0)
+                break
+        if xp > 0:
+            leaderboard.append({"student": student_nickname, "xp": xp, "solved": solved, "last_activity": last_activity.get("timestamp", "") if last_activity else "", "activity_type": last_activity.get("type", "") if last_activity else ""})
+    return sorted(leaderboard, key=lambda x: x["xp"], reverse=True)
+
+def get_student_activities(student_nickname: str, limit: int = 20) -> list:
+    log_file = ACTIVITY_LOG_DIR / f"{student_nickname}_activities.json"
+    if not log_file.exists():
+        return []
+    try:
+        activities = json.loads(log_file.read_text(encoding="utf-8"))
+        recent = activities[-limit:] if len(activities) > limit else activities
+        result = []
+        for i in range(len(recent) - 1, -1, -1):
+            result.append(recent[i])
+        return result
+    except:
+        return []
+
+def get_student_stats(student_nickname: str) -> dict:
+    log_file = ACTIVITY_LOG_DIR / f"{student_nickname}_activities.json"
+    if not log_file.exists():
+        return {"total_activities": 0, "problems_solved": 0, "level_ups": 0, "topics_mastered": 0, "total_xp": 0}
+    activities = json.loads(log_file.read_text(encoding="utf-8"))
+    stats = {"total_activities": len(activities), "problems_solved": len([a for a in activities if a["type"] == "problem_solved"]), "level_ups": len([a for a in activities if a["type"] == "level_up"]), "topics_mastered": len([a for a in activities if a["type"] == "topic_mastery"]), "total_xp": 0}
+    for activity in activities:
+        if "xp" in activity.get("details", {}):
+            stats["total_xp"] = activity["details"]["xp"]
+    return stats
 
 PROGRESS_FILE = Path(__file__).with_name("progress.json")
 
@@ -129,7 +198,7 @@ def add_xp(amount: int):
     if after > before:
         st.session_state.level_up = (after, tier_of(after)[1])
         # 레벨업 활동 기록
-        activity_log.log_activity(st.session_state.user, "level_up", {
+        log_activity(st.session_state.user, "level_up", {
             "old_level": before,
             "new_level": after,
             "xp": progress["xp"],
@@ -172,7 +241,7 @@ if "user" not in st.session_state:
                     st.session_state.titles = []
 
                     # 활동 기록
-                    activity_log.log_activity(login_nickname, "login", {"user": login_nickname})
+                    log_activity(login_nickname, "login", {"user": login_nickname})
 
                     # 호스트 계정인 경우 모니터링 대시보드 표시
                     if st.session_state.is_host:
@@ -473,7 +542,7 @@ elif st.session_state.view == "problem":
         })
         save_progress(progress)
         # 활동 기록
-        activity_log.log_activity(st.session_state.user, "problem_solved", {
+        log_activity(st.session_state.user, "problem_solved", {
             "title": p.title,
             "kind": current["kind"],
             "difficulty": current["difficulty"],
@@ -912,7 +981,7 @@ elif st.session_state.view == "monitoring":
     # 자동 새로고침
     st.markdown("💡 **팁:** 페이지를 주기적으로 새로고침하면 실시간 데이터를 볼 수 있습니다 (F5 또는 Ctrl+R)")
 
-    all_activities = activity_log.get_all_students_latest_activity()
+    all_activities = get_all_students_latest_activity()
 
     if not all_activities:
         st.info("아직 학생 활동이 없습니다.")
@@ -970,7 +1039,7 @@ elif st.session_state.view == "leaderboard":
 
     st.divider()
 
-    leaderboard = activity_log.get_leaderboard()
+    leaderboard = get_leaderboard()
 
     if not leaderboard:
         st.info("아직 순위 데이터가 없습니다.")
@@ -1024,7 +1093,7 @@ elif st.session_state.view == "student_management":
             level, _, _ = level_info(xp)
             tier_min, tier_name, _, _ = tier_of(level)
 
-            stats = activity_log.get_student_stats(nickname)
+            stats = get_student_stats(nickname)
 
             with st.container(border=True):
                 col1, col2, col3, col4, col5 = st.columns(5)
@@ -1043,7 +1112,7 @@ elif st.session_state.view == "student_management":
                 # 상세 통계
                 if st.button(f"📊 {nickname} 상세 보기", key=f"details_{nickname}"):
                     with st.expander(f"{nickname}의 상세 활동", expanded=True):
-                        activities = activity_log.get_student_activities(nickname, limit=10)
+                        activities = get_student_activities(nickname, limit=10)
                         if activities:
                             for i, activity in enumerate(activities, 1):
                                 activity_type = activity.get("type", "unknown")

@@ -1,0 +1,13 @@
+﻿streamlit : 2026-10-09 00:51:19.603 Uvicorn server started on :::8511
+At line:1 char:374
++ ... ai_python_lab\project1_pytest_app"; streamlit run app.py 2>&1 | Tee-O ...
++                                         ~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (2026-10-09 00:5...rted on :::8511:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8511
+  Network URL: http://192.168.45.202:8511
+

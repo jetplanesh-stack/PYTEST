@@ -396,10 +396,17 @@ elif st.session_state.view == "learning":
                 }
                 status = status_map.get(mastery, "⭕")
 
-                col1, col2, col3 = st.columns([0.5, 2, 2])
+                col1, col2, col3, col4 = st.columns([0.5, 2, 1.5, 1])
                 col1.write(status)
                 col2.write(f"**{topic.name}**")
-                col3.caption(f"예상 {topic.estimated_time}분 · {', '.join(topic.skills[:2])}")
+                col3.caption(f"예상 {topic.estimated_time}분")
+
+                # 실습 버튼 (튜토리얼이 있을 때)
+                if topic.tutorial and unlocked:
+                    if col4.button("🔨 실습", key=f"learn_{topic.id}", use_container_width=True):
+                        st.session_state.view = "tutorial"
+                        st.session_state.selected_tutorial = topic.id
+                        st.rerun()
 
                 if not unlocked and topic.prerequisites:
                     prereq_names = [TOPIC_BY_ID[p].name for p in topic.prerequisites]
@@ -701,22 +708,25 @@ elif st.session_state.view == "survey":
         with st.form("satisfaction_survey_form"):
             st.markdown("**앱 사용 경험에 대한 의견을 알려주세요**")
 
-            overall = st.slider(
+            overall = st.radio(
                 "전반적으로 이 앱이 도움이 되셨나요?",
-                min_value=1, max_value=5, value=3,
-                format=lambda x: {1: "😞 전혀", 2: "😐 조금", 3: "😐 보통", 4: "😊 많이", 5: "😍 매우"}[x]
+                options=[1, 2, 3, 4, 5],
+                format_func=lambda x: {1: "😞 전혀", 2: "😐 조금", 3: "😐 보통", 4: "😊 많이", 5: "😍 매우"}[x],
+                horizontal=True
             )
 
-            difficulty_level = st.slider(
+            difficulty_level = st.radio(
                 "학습 난이도가 적절했나요?",
-                min_value=1, max_value=5, value=3,
-                format=lambda x: {1: "너무 쉬움", 2: "쉬움", 3: "적당", 4: "어려움", 5: "너무 어려움"}[x]
+                options=[1, 2, 3, 4, 5],
+                format_func=lambda x: {1: "너무 쉬움", 2: "쉬움", 3: "적당", 4: "어려움", 5: "너무 어려움"}[x],
+                horizontal=True
             )
 
-            ui_rating = st.slider(
+            ui_rating = st.radio(
                 "앱의 UI/UX에 만족하신가요?",
-                min_value=1, max_value=5, value=3,
-                format=lambda x: {1: "😞 나쁨", 2: "😐 보통", 3: "😐 괜찮음", 4: "😊 좋음", 5: "😍 매우좋음"}[x]
+                options=[1, 2, 3, 4, 5],
+                format_func=lambda x: {1: "😞 나쁨", 2: "😐 보통", 3: "😐 괜찮음", 4: "😊 좋음", 5: "😍 매우좋음"}[x],
+                horizontal=True
             )
 
             suggestion = st.text_area(
@@ -863,12 +873,24 @@ elif st.session_state.view == "tutorial":
     beginner_topics = [t for t in LearningPath.get_all_topics() if t.difficulty == "초급"]
 
     # 주제 선택
+    default_idx = 0
+    if hasattr(st.session_state, 'selected_tutorial'):
+        for i, t in enumerate(beginner_topics):
+            if t.id == st.session_state.selected_tutorial:
+                default_idx = i
+                break
+
     selected_topic = st.selectbox(
         "📖 배우고 싶은 주제를 선택하세요",
         beginner_topics,
+        index=default_idx,
         format_func=lambda t: f"{t.name} (예상 {t.estimated_time}분)",
         key="tutorial_topic_select"
     )
+
+    # 선택 후 상태 정리
+    if hasattr(st.session_state, 'selected_tutorial'):
+        del st.session_state.selected_tutorial
 
     if not selected_topic or not selected_topic.tutorial:
         st.warning("이 주제는 아직 실습자료가 없습니다.")

@@ -870,130 +870,118 @@ elif st.session_state.view == "tutorial":
         key="tutorial_topic_select"
     )
 
-    if selected_topic and selected_topic.tutorial:
-        tutorial = selected_topic.tutorial
+    if not selected_topic or not selected_topic.tutorial:
+        st.warning("이 주제는 아직 실습자료가 없습니다.")
+        st.stop()
 
-        # 진행 상황 로드
-        tutorial_progress = survey.get_tutorial_progress(st.session_state.user)
-        current_step = tutorial_progress.get(selected_topic.id, {}).get("step_completed", 0)
+    tutorial = selected_topic.tutorial
+    tutorial_progress = survey.get_tutorial_progress(st.session_state.user)
+    current_step = tutorial_progress.get(selected_topic.id, {}).get("step_completed", 0)
 
-        st.markdown(f"### {tutorial['title']}")
-        st.info(tutorial['app_description'])
+    st.markdown(f"### {tutorial['title']}")
+    st.info(tutorial['app_description'])
 
-        # 진행 바
-        total_steps = len(tutorial['steps'])
-        st.progress(min(current_step / total_steps, 1.0), text=f"진행률: {current_step}/{total_steps}")
+    # 진행 바
+    total_steps = len(tutorial['steps'])
+    st.progress(min(current_step / total_steps, 1.0) if total_steps > 0 else 0, text=f"진행률: {current_step}/{total_steps}")
 
-        st.divider()
+    st.divider()
 
-        # 각 스텝 렌더링
-        for step_data in tutorial['steps']:
-            step_num = step_data['step']
-            step_type = step_data['type']
-            step_title = step_data['title']
+    # 각 스텝 렌더링
+    for step_data in tutorial['steps']:
+        step_num = step_data['step']
+        step_type = step_data.get('type', 'lesson')
+        step_title = step_data.get('title', f"Step {step_num}")
+        step_key = f"{selected_topic.id}_step_{step_num}"
+        is_current = step_num == current_step + 1
 
-            # 완료한 스텝은 축소, 현재 스텝은 전개
-            step_key = f"{selected_topic.id}_step_{step_num}"
-            is_current = step_num == current_step + 1
+        with st.expander(step_title, expanded=is_current):
+            if step_type == "lesson":
+                st.markdown(step_data.get('content', ''))
+                if 'code_example' in step_data:
+                    st.markdown("**예제 코드:**")
+                    st.code(step_data['code_example'], language="python")
 
-            with st.expander(step_title, expanded=is_current):
-                if step_type == "lesson":
-                    # 개념 학습 단계
-                    st.markdown(step_data['content'])
-                    if 'code_example' in step_data:
-                        st.markdown("**예제 코드:**")
-                        st.code(step_data['code_example'], language="python")
+                if is_current and st.button("✅ 이해했어요", key=f"btn_{step_key}"):
+                    survey.update_tutorial_step(st.session_state.user, selected_topic.id, step_num)
+                    st.success("다음 스텝으로 진행하세요!")
+                    st.rerun()
 
-                    if is_current and st.button("✅ 이해했어요", key=f"btn_{step_key}"):
-                        current_step = step_num
-                        survey.update_tutorial_step(st.session_state.user, selected_topic.id, current_step)
-                        st.success("다음 스텝으로 진행하세요!")
-                        st.rerun()
+            elif step_type == "practice":
+                st.markdown(f"**과제:** {step_data.get('task', '')}")
 
-                elif step_type == "practice":
-                    # 실습 단계
-                    st.markdown(f"**과제:** {step_data['task']}")
+                if 'hint' in step_data:
+                    with st.expander("💡 힌트"):
+                        st.code(step_data['hint'], language="python")
 
-                    if 'hint' in step_data:
-                        with st.expander("💡 힌트"):
-                            st.code(step_data['hint'], language="python")
+                code_input = st.text_area(
+                    "코드를 작성하세요:",
+                    height=200,
+                    key=f"code_{step_key}",
+                    placeholder="# 파이썬 코드를 여기에 작성하세요"
+                )
 
-                    code_input = st.text_area(
-                        "코드를 작성하세요:",
-                        height=200,
-                        key=f"code_{step_key}",
-                        placeholder="# 파이썬 코드를 여기에 작성하세요"
-                    )
+                col1, col2 = st.columns(2)
 
-                    col1, col2 = st.columns(2)
-
-                    with col1:
-                        if st.button("실행해보기", key=f"run_{step_key}"):
-                            if code_input.strip():
-                                ok, output = ai_helper.run_code(code_input)
-                                if ok:
-                                    st.success("실행 결과:")
-                                    st.code(output, language="text")
-                                else:
-                                    st.error("에러가 발생했습니다:")
-                                    st.code(output, language="text")
+                with col1:
+                    if st.button("실행해보기", key=f"run_{step_key}"):
+                        if code_input.strip():
+                            ok, output = ai_helper.run_code(code_input)
+                            if ok:
+                                st.success("실행 결과:")
+                                st.code(output, language="text")
                             else:
-                                st.warning("코드를 작성해주세요.")
+                                st.error("에러가 발생했습니다:")
+                                st.code(output, language="text")
+
+                with col2:
+                    if st.button("제출하기", type="primary", key=f"submit_{step_key}"):
+                        if not code_input.strip():
+                            st.warning("코드를 작성해주세요.")
+                        else:
+                            ok, output = ai_helper.run_code(code_input)
+                            validation_type = step_data.get('validation', 'output_contains')
+                            is_correct = False
+
+                            if validation_type == "output_contains" and ok:
+                                keywords = step_data.get('validation_keywords', [])
+                                is_correct = all(kw in output for kw in keywords)
+
+                            elif validation_type == "exact_output" and ok:
+                                expected = step_data.get('expected_output', '')
+                                is_correct = output.strip() == expected.strip()
+
+                            if is_correct:
+                                st.success("✅ 정답입니다!")
+                                survey.update_tutorial_step(st.session_state.user, selected_topic.id, step_num)
+                                progress["solved"] = progress.get("solved", 0) + 1
+                                add_xp(10)
+                                st.rerun()
+                            else:
+                                st.error("다시 시도해주세요.")
+                                if not ok:
+                                    st.code(output, language="text")
+
+            elif step_type == "explanation":
+                st.markdown(step_data.get('content', ''))
+
+                if is_current:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("✅ 이해했어요", key=f"understand_{step_key}"):
+                            survey.update_tutorial_step(st.session_state.user, selected_topic.id, step_num)
+
+                            if step_num >= total_steps:
+                                topic_mastery = progress.get("topic_mastery", {})
+                                if topic_mastery.get(selected_topic.id, 0) < Mastery.BASIC.value:
+                                    topic_mastery[selected_topic.id] = Mastery.BASIC.value
+                                    progress["topic_mastery"] = topic_mastery
+                                    add_xp(20)
+                                    st.success(f"🎉 {selected_topic.name} 튜토리얼 완료! 숙련도: BASIC")
+
+                            st.rerun()
 
                     with col2:
-                        if st.button("제출하기", type="primary", key=f"submit_{step_key}"):
-                            if not code_input.strip():
-                                st.warning("코드를 작성해주세요.")
-                            else:
-                                ok, output = ai_helper.run_code(code_input)
-
-                                # 검증 방식에 따라 확인
-                                validation = step_data.get('validation', 'output_contains')
-                                is_correct = False
-
-                                if validation == "output_contains":
-                                    keywords = step_data.get('validation_keywords', [])
-                                    is_correct = all(kw in output for kw in keywords) if ok else False
-
-                                elif validation == "exact_output":
-                                    expected = step_data.get('expected_output', '')
-                                    is_correct = output.strip() == expected.strip() if ok else False
-
-                                if is_correct:
-                                    st.success("✅ 정답입니다!")
-                                    current_step = step_num
-                                    survey.update_tutorial_step(st.session_state.user, selected_topic.id, current_step)
-                                    progress["solved"] += 1
-                                    add_xp(10)  # 실습 완료 보너스 XP
-                                    st.rerun()
-                                else:
-                                    st.error("다시 시도해주세요.")
-                                    if not ok:
-                                        st.code(output, language="text")
-
-                elif step_type == "explanation":
-                    # 설명 단계
-                    st.markdown(step_data['content'])
-
-                    if is_current:
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            if st.button("✅ 이해했어요", key=f"understand_{step_key}"):
-                                current_step = step_num
-                                survey.update_tutorial_step(st.session_state.user, selected_topic.id, current_step)
-
-                                # 튜토리얼 완료: 숙련도 업그레이드
-                                if current_step >= total_steps:
-                                    topic_mastery = progress.get("topic_mastery", {})
-                                    if topic_mastery.get(selected_topic.id, 0) < Mastery.BASIC.value:
-                                        topic_mastery[selected_topic.id] = Mastery.BASIC.value
-                                        progress["topic_mastery"] = topic_mastery
-                                        add_xp(20)  # 튜토리얼 완료 보너스
-                                        st.success(f"🎉 {selected_topic.name} 튜토리얼 완료! 숙련도: BASIC")
-
-                                st.rerun()
-
-                        with col2:
-                            if st.button("다음 주제로", key=f"next_topic_{step_key}"):
-                                st.session_state.view = "learning"
-                                st.rerun()
+                        if st.button("다음 주제로", key=f"next_topic_{step_key}"):
+                            st.session_state.view = "learning"
+                            st.rerun()

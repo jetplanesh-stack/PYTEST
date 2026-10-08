@@ -154,6 +154,29 @@ def save_progress_survey(nickname: str, survey_data: dict):
     survey_file.write_text(json.dumps(survey, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def get_tutorial_progress(nickname: str) -> dict:
+    """튜토리얼 진행 상황 로드"""
+    survey = load_survey(nickname)
+    return survey.get("tutorial_progress", {})
+
+
+def save_tutorial_progress(nickname: str, progress: dict):
+    """튜토리얼 진행 상황 저장"""
+    survey = load_survey(nickname)
+    survey["tutorial_progress"] = progress
+    save_survey(nickname, survey)
+
+
+def update_tutorial_step(nickname: str, topic_id: str, step_completed: int):
+    """튜토리얼 단계 진행 업데이트"""
+    progress = get_tutorial_progress(nickname)
+    if topic_id not in progress:
+        progress[topic_id] = {"step_completed": 0, "last_updated": datetime.now().isoformat()}
+    progress[topic_id]["step_completed"] = step_completed
+    progress[topic_id]["last_updated"] = datetime.now().isoformat()
+    save_tutorial_progress(nickname, progress)
+
+
 def show_feedback_form():
     """문제 풀이 후 피드백 폼"""
     st.markdown("---")

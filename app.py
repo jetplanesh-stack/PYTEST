@@ -2,7 +2,6 @@
 
 import json
 from pathlib import Path
-from datetime import datetime
 
 import streamlit as st
 
@@ -11,75 +10,6 @@ import auth
 import survey
 import dashboard
 from learning_paths import LearningPath, Mastery, TOPIC_BY_ID
-
-# ========== 활동 로깅 함수 ==========
-ACTIVITY_LOG_DIR = Path(__file__).with_name("activity_logs")
-
-def init_activity_log():
-    ACTIVITY_LOG_DIR.mkdir(exist_ok=True)
-
-def log_activity(student_nickname: str, activity_type: str, details: dict):
-    init_activity_log()
-    log_file = ACTIVITY_LOG_DIR / f"{student_nickname}_activities.json"
-    activities = json.loads(log_file.read_text(encoding="utf-8")) if log_file.exists() else []
-    activities.append({"timestamp": datetime.now().isoformat(), "type": activity_type, "details": details})
-    log_file.write_text(json.dumps(activities, ensure_ascii=False, indent=2), encoding="utf-8")
-
-def get_all_students_latest_activity() -> dict:
-    init_activity_log()
-    result = {}
-    for log_file in ACTIVITY_LOG_DIR.glob("*_activities.json"):
-        student_nickname = log_file.stem.replace("_activities", "")
-        activities = json.loads(log_file.read_text(encoding="utf-8"))
-        if activities:
-            result[student_nickname] = activities[-1]
-    return result
-
-def get_leaderboard() -> list:
-    init_activity_log()
-    leaderboard = []
-    for log_file in ACTIVITY_LOG_DIR.glob("*_activities.json"):
-        student_nickname = log_file.stem.replace("_activities", "")
-        try:
-            activities = json.loads(log_file.read_text(encoding="utf-8"))
-        except:
-            continue
-        xp, solved, last_activity = 0, 0, None
-        for i in range(len(activities) - 1, -1, -1):
-            activity = activities[i]
-            if activity.get("type") in ["problem_solved", "level_up"]:
-                last_activity = activity
-                xp = activity.get("details", {}).get("xp", 0)
-                solved = activity.get("details", {}).get("solved", 0)
-                break
-        if xp > 0:
-            leaderboard.append({"student": student_nickname, "xp": xp, "solved": solved, "last_activity": last_activity.get("timestamp", "") if last_activity else "", "activity_type": last_activity.get("type", "") if last_activity else ""})
-    return sorted(leaderboard, key=lambda x: x["xp"], reverse=True)
-
-def get_student_activities(student_nickname: str, limit: int = 20) -> list:
-    log_file = ACTIVITY_LOG_DIR / f"{student_nickname}_activities.json"
-    if not log_file.exists():
-        return []
-    try:
-        activities = json.loads(log_file.read_text(encoding="utf-8"))
-        recent = activities[-limit:] if len(activities) > limit else activities
-        result = []
-        for i in range(len(recent) - 1, -1, -1):
-            result.append(recent[i])
-        return result
-    except:
-        return []
-
-def get_student_stats(student_nickname: str) -> dict:
-    log_file = ACTIVITY_LOG_DIR / f"{student_nickname}_activities.json"
-    if not log_file.exists():
-        return {"total_activities": 0, "problems_solved": 0, "level_ups": 0, "topics_mastered": 0, "total_xp": 0}
-    activities = json.loads(log_file.read_text(encoding="utf-8"))
-    stats = {"total_activities": len(activities), "problems_solved": len([a for a in activities if a["type"] == "problem_solved"]), "level_ups": len([a for a in activities if a["type"] == "level_up"]), "topics_mastered": len([a for a in activities if a["type"] == "topic_mastery"]), "total_xp": 0}
-    for activity in activities:
-        if "xp" in activity.get("details", {}):
-            stats["total_xp"] = activity["details"]["xp"]
-    return stats
 
 PROGRESS_FILE = Path(__file__).with_name("progress.json")
 
@@ -197,13 +127,6 @@ def add_xp(amount: int):
     st.toast(f"+{amount} XP")
     if after > before:
         st.session_state.level_up = (after, tier_of(after)[1])
-        # 레벨업 활동 기록
-        log_activity(st.session_state.user, "level_up", {
-            "old_level": before,
-            "new_level": after,
-            "xp": progress["xp"],
-            "tier": tier_of(after)[1],
-        })
 
 
 def subjective_xp(difficulty: str, grade: int) -> int:
@@ -235,24 +158,16 @@ if "user" not in st.session_state:
             if login_nickname and login_password:
                 if auth.verify_password(login_nickname, login_password):
                     st.session_state.user = login_nickname
-                    st.session_state.is_host = auth.is_host(login_nickname)
                     st.session_state.progress = auth.load_user_progress(login_nickname)
                     st.session_state.problem = None
                     st.session_state.titles = []
 
-                    # 활동 기록
-                    log_activity(login_nickname, "login", {"user": login_nickname})
-
-                    # 호스트 계정인 경우 모니터링 대시보드 표시
-                    if st.session_state.is_host:
-                        st.session_state.view = "monitoring"
+                    # 진도 설문 완료 여부 확인
+                    progress_survey = survey.load_progress_survey(login_nickname)
+                    if not progress_survey:
+                        st.session_state.view = "progress_survey"
                     else:
-                        # 진도 설문 완료 여부 확인
-                        progress_survey = survey.load_progress_survey(login_nickname)
-                        if not progress_survey:
-                            st.session_state.view = "progress_survey"
-                        else:
-                            st.session_state.view = "dashboard"
+                        st.session_state.view = "dashboard"
 
                     st.success("✅ 로그인 성공!")
                     st.rerun()
@@ -277,13 +192,8 @@ if "user" not in st.session_state:
             elif auth.user_exists(signup_nickname):
                 st.error(f"❌ '{signup_nickname}'은 이미 사용 중인 닉네임입니다.")
             else:
-                # bsh 계정을 호스트로 설정
-                is_host = (signup_nickname.lower() == "bsh")
-                if auth.create_user(signup_nickname, signup_password, is_host=is_host):
-                    if is_host:
-                        st.success("✅ 호스트 계정(bsh) 생성됨! 로그인해주세요.")
-                    else:
-                        st.success("✅ 회원가입 성공! 로그인해주세요.")
+                if auth.create_user(signup_nickname, signup_password):
+                    st.success("✅ 회원가입 성공! 로그인해주세요.")
                     st.rerun()
                 else:
                     st.error("회원가입에 실패했습니다.")
@@ -352,60 +262,43 @@ st.html(
     unsafe_allow_javascript=True,
 )
 
-is_host = st.session_state.get("is_host", False)
+st.title("🐍 PYTEST")
+st.caption("AI가 내는 파이썬 문제를 풀고 레벨을 올리세요!")
 
-if is_host:
-    st.title("🐍 PYTEST - 강사용")
-    st.caption("학생들의 레슨 진행 상황을 모니터링합니다")
-
-    col1, col2, col3 = st.columns(3)
-    if col1.button("📊 실시간 모니터링", use_container_width=True,
-                   type="primary" if st.session_state.view == "monitoring" else "secondary"):
-        st.session_state.view = "monitoring"
-        st.rerun()
-    if col2.button("🏆 순위표", use_container_width=True,
-                   type="primary" if st.session_state.view == "leaderboard" else "secondary"):
-        st.session_state.view = "leaderboard"
-        st.rerun()
-    if col3.button("👥 학생 관리", use_container_width=True,
-                   type="primary" if st.session_state.view == "student_management" else "secondary"):
-        st.session_state.view = "student_management"
-        st.rerun()
-else:
-    st.title("🐍 PYTEST")
-    st.caption("AI가 내는 파이썬 문제를 풀고 레벨을 올리세요!")
-
-    col1, col2, col3, col4, col5 = st.columns(5)
-    if col1.button("🏠 홈", use_container_width=True,
-                   type="primary" if st.session_state.view == "dashboard" else "secondary"):
-        st.session_state.view = "dashboard"
-        st.rerun()
-    if col2.button("💻 문제 풀이", use_container_width=True,
-                   type="primary" if st.session_state.view == "problem" else "secondary"):
-        st.session_state.view = "problem"
-        st.rerun()
-    if col3.button("📚 학습 경로", use_container_width=True,
-                   type="primary" if st.session_state.view == "learning" else "secondary"):
-        st.session_state.view = "learning"
-        st.rerun()
-    if col4.button("📊 설문조사", use_container_width=True,
-                   type="primary" if st.session_state.view == "survey" else "secondary"):
-        st.session_state.view = "survey"
-        st.rerun()
-    if col5.button("🎯 진도 설정", use_container_width=True,
-                   type="primary" if st.session_state.view == "progress_survey" else "secondary"):
-        st.session_state.view = "progress_survey"
-        st.rerun()
+col1, col2, col3, col4, col5, col6 = st.columns(6)
+if col1.button("🏠 홈", use_container_width=True,
+               type="primary" if st.session_state.view == "dashboard" else "secondary"):
+    st.session_state.view = "dashboard"
+    st.rerun()
+if col2.button("💻 문제 풀이", use_container_width=True,
+               type="primary" if st.session_state.view == "problem" else "secondary"):
+    st.session_state.view = "problem"
+    st.rerun()
+if col3.button("📚 학습 경로", use_container_width=True,
+               type="primary" if st.session_state.view == "learning" else "secondary"):
+    st.session_state.view = "learning"
+    st.rerun()
+if col4.button("🔨 실습", use_container_width=True,
+               type="primary" if st.session_state.view == "tutorial" else "secondary"):
+    st.session_state.view = "tutorial"
+    st.rerun()
+if col5.button("📊 설문조사", use_container_width=True,
+               type="primary" if st.session_state.view == "survey" else "secondary"):
+    st.session_state.view = "survey"
+    st.rerun()
+if col6.button("🎯 진도 설정", use_container_width=True,
+               type="primary" if st.session_state.view == "progress_survey" else "secondary"):
+    st.session_state.view = "progress_survey"
+    st.rerun()
 
 st.divider()
 
 # --- 사이드바: 레벨 & 설정 ---
 with st.sidebar:
     # 사용자 정보
-    st.caption(f"👤 {st.session_state.user} {'(강사)' if is_host else '(학생)'}")
+    st.caption(f"👤 {st.session_state.user}")
     if st.button("🚪 로그아웃", use_container_width=True):
-        if not is_host:
-            auth.save_user_progress(st.session_state.user, st.session_state.progress)
+        auth.save_user_progress(st.session_state.user, st.session_state.progress)
         del st.session_state.user
         del st.session_state.progress
         del st.session_state.problem
@@ -413,41 +306,37 @@ with st.sidebar:
 
     st.divider()
 
-    if is_host:
-        st.subheader("📊 모니터링 대시보드")
-        st.info("모든 학생들의 실시간 학습 진행 상황을 볼 수 있습니다.")
-    else:
-        st.markdown(f'<span class="tier-badge">{tier_name}</span>', unsafe_allow_html=True)
-        st.subheader(f"Lv. {level}")
-        st.progress(cur_xp / need_xp, text=f"{cur_xp} / {need_xp} XP")
-        st.caption(f"누적 경험치 {progress['xp']} XP · 맞힌 문제 {progress['solved']}개")
-        st.caption("🟢 Beginner Lv.1~4 · 🟡 Student Lv.5~9 · 🔴 Expert Lv.10+")
+    st.markdown(f'<span class="tier-badge">{tier_name}</span>', unsafe_allow_html=True)
+    st.subheader(f"Lv. {level}")
+    st.progress(cur_xp / need_xp, text=f"{cur_xp} / {need_xp} XP")
+    st.caption(f"누적 경험치 {progress['xp']} XP · 맞힌 문제 {progress['solved']}개")
+    st.caption("🟢 Beginner Lv.1~4 · 🟡 Student Lv.5~9 · 🔴 Expert Lv.10+")
 
-        st.divider()
+    st.divider()
 
-        # 학습 경로 추천
-        topic_mastery = {k: Mastery(v) for k, v in progress.get("topic_mastery", {}).items()}
-        recommended = LearningPath.get_recommended_next(topic_mastery, level)
-        if recommended:
-            st.info(f"📚 추천: **{recommended.name}**\n\n{recommended.description[:60]}...")
+    # 학습 경로 추천
+    topic_mastery = {k: Mastery(v) for k, v in progress.get("topic_mastery", {}).items()}
+    recommended = LearningPath.get_recommended_next(topic_mastery, level)
+    if recommended:
+        st.info(f"📚 추천: **{recommended.name}**\n\n{recommended.description[:60]}...")
 
-        st.divider()
-        kind = st.radio("문제 종류", ["객관식", "주관식"], horizontal=True)
-        difficulty = st.radio("난이도", ["초급", "중급", "고난도"], horizontal=True)
-        st.caption(f"기본 경험치: {BASE_XP[kind][difficulty]} XP")
+    st.divider()
+    kind = st.radio("문제 종류", ["객관식", "주관식"], horizontal=True)
+    difficulty = st.radio("난이도", ["초급", "중급", "고난도"], horizontal=True)
+    st.caption(f"기본 경험치: {BASE_XP[kind][difficulty]} XP")
 
-        if st.button("새 문제 출제", type="primary", use_container_width=True):
-            with st.spinner("AI가 문제를 만드는 중..."):
-                try:
-                    problem = ai_helper.generate_problem(kind, difficulty, st.session_state.titles)
-                except Exception as e:
-                    st.error(f"문제 생성 실패: {e}")
-                else:
-                    st.session_state.titles.append(problem.title)
-                    st.session_state.problem = {
-                        "kind": kind, "difficulty": difficulty, "data": problem,
-                        "attempts": 0, "solved": False, "best_grade": None, "result": None,
-                    }
+    if st.button("새 문제 출제", type="primary", use_container_width=True):
+        with st.spinner("AI가 문제를 만드는 중..."):
+            try:
+                problem = ai_helper.generate_problem(kind, difficulty, st.session_state.titles)
+            except Exception as e:
+                st.error(f"문제 생성 실패: {e}")
+            else:
+                st.session_state.titles.append(problem.title)
+                st.session_state.problem = {
+                    "kind": kind, "difficulty": difficulty, "data": problem,
+                    "attempts": 0, "solved": False, "best_grade": None, "result": None,
+                }
 
     with st.expander("진행 상황 초기화"):
         if st.button("레벨/경험치 초기화"):
@@ -541,15 +430,6 @@ elif st.session_state.view == "problem":
             "result": result, "xp": xp,
         })
         save_progress(progress)
-        # 활동 기록
-        log_activity(st.session_state.user, "problem_solved", {
-            "title": p.title,
-            "kind": current["kind"],
-            "difficulty": current["difficulty"],
-            "result": result,
-            "xp": xp,
-            "solved": progress["solved"],
-        })
 
 
     def code_lines(code: str) -> list[str]:
@@ -971,155 +851,149 @@ elif st.session_state.view == "progress_survey":
         st.session_state.view = "dashboard"
         st.rerun()
 
-# ==================== 호스트 모니터링 섹션 ====================
-elif st.session_state.view == "monitoring":
-    st.header("📊 실시간 학생 모니터링")
-    st.markdown("모든 학생들의 학습 진행 상황을 실시간으로 확인합니다")
+# ==================== 실습 섹션 ====================
+elif st.session_state.view == "tutorial":
+    st.header("🔨 실습으로 배우기")
+    st.markdown("함수를 배우고, 실제 앱을 만들면서 프로그래밍 개념을 익혀봅시다!")
 
     st.divider()
 
-    # 자동 새로고침
-    st.markdown("💡 **팁:** 페이지를 주기적으로 새로고침하면 실시간 데이터를 볼 수 있습니다 (F5 또는 Ctrl+R)")
+    # 실습 가능한 주제 필터링 (초급 주제)
+    topic_mastery = {k: Mastery(v) for k, v in progress.get("topic_mastery", {}).items()}
+    beginner_topics = [t for t in LearningPath.get_all_topics() if t.difficulty == "초급"]
 
-    all_activities = get_all_students_latest_activity()
+    # 주제 선택
+    selected_topic = st.selectbox(
+        "📖 배우고 싶은 주제를 선택하세요",
+        beginner_topics,
+        format_func=lambda t: f"{t.name} (예상 {t.estimated_time}분)",
+        key="tutorial_topic_select"
+    )
 
-    if not all_activities:
-        st.info("아직 학생 활동이 없습니다.")
-    else:
-        # 학생별 최신 활동 표시
-        students = sorted(all_activities.keys())
+    if selected_topic and selected_topic.tutorial:
+        tutorial = selected_topic.tutorial
 
-        for student in students:
-            activity = all_activities[student]
-            activity_type = activity.get("type", "unknown")
-            details = activity.get("details", {})
-            timestamp = activity.get("timestamp", "")
+        # 진행 상황 로드
+        tutorial_progress = survey.get_tutorial_progress(st.session_state.user)
+        current_step = tutorial_progress.get(selected_topic.id, {}).get("step_completed", 0)
 
-            # 활동 유형별 아이콘과 메시지
-            if activity_type == "problem_solved":
-                icon = "✅"
-                msg = f"**문제 풀이** - {details.get('kind')} ({details.get('difficulty')}) · {details.get('result')}"
-                xp_info = f"  · +{details.get('xp', 0)} XP"
-                solved_info = f"  · 풀이 {details.get('solved', 0)}문제"
-            elif activity_type == "level_up":
-                icon = "🎉"
-                old_lvl = details.get("old_level", "?")
-                new_lvl = details.get("new_level", "?")
-                msg = f"**레벨 업** - Lv. {old_lvl} → Lv. {new_lvl} ({details.get('tier', '?')})"
-                xp_info = f"  · {details.get('xp', 0)} XP"
-                solved_info = ""
-            elif activity_type == "login":
-                icon = "🔓"
-                msg = "**로그인**"
-                xp_info = ""
-                solved_info = ""
-            else:
-                icon = "📝"
-                msg = f"**{activity_type}**"
-                xp_info = ""
-                solved_info = ""
+        st.markdown(f"### {tutorial['title']}")
+        st.info(tutorial['app_description'])
 
-            with st.container(border=True):
-                col1, col2, col3 = st.columns([1, 3, 1])
-                with col1:
-                    st.markdown(f"### {icon}")
-                with col2:
-                    st.markdown(f"**{student}** \n{msg}{xp_info}{solved_info}")
-                with col3:
-                    # 시간 표시
-                    if timestamp:
-                        from datetime import datetime
-                        dt = datetime.fromisoformat(timestamp)
-                        st.caption(dt.strftime("%H:%M:%S"))
+        # 진행 바
+        total_steps = len(tutorial['steps'])
+        st.progress(min(current_step / total_steps, 1.0), text=f"진행률: {current_step}/{total_steps}")
 
-# ==================== 순위표 섹션 ====================
-elif st.session_state.view == "leaderboard":
-    st.header("🏆 순위표")
-    st.markdown("학생들의 경험치 기준 순위를 표시합니다")
+        st.divider()
 
-    st.divider()
+        # 각 스텝 렌더링
+        for step_data in tutorial['steps']:
+            step_num = step_data['step']
+            step_type = step_data['type']
+            step_title = step_data['title']
 
-    leaderboard = get_leaderboard()
+            # 완료한 스텝은 축소, 현재 스텝은 전개
+            step_key = f"{selected_topic.id}_step_{step_num}"
+            is_current = step_num == current_step + 1
 
-    if not leaderboard:
-        st.info("아직 순위 데이터가 없습니다.")
-    else:
-        # 순위표 표시
-        for rank, entry in enumerate(leaderboard, 1):
-            student = entry["student"]
-            xp = entry["xp"]
-            solved = entry["solved"]
+            with st.expander(step_title, expanded=is_current):
+                if step_type == "lesson":
+                    # 개념 학습 단계
+                    st.markdown(step_data['content'])
+                    if 'code_example' in step_data:
+                        st.markdown("**예제 코드:**")
+                        st.code(step_data['code_example'], language="python")
 
-            # 메달 표시
-            medal = ""
-            if rank == 1:
-                medal = "🥇"
-            elif rank == 2:
-                medal = "🥈"
-            elif rank == 3:
-                medal = "🥉"
+                    if is_current and st.button("✅ 이해했어요", key=f"btn_{step_key}"):
+                        current_step = step_num
+                        survey.update_tutorial_step(st.session_state.user, selected_topic.id, current_step)
+                        st.success("다음 스텝으로 진행하세요!")
+                        st.rerun()
 
-            with st.container(border=True):
-                col1, col2, col3, col4 = st.columns([0.5, 2, 1, 1])
-                with col1:
-                    st.markdown(f"### {medal} {rank}")
-                with col2:
-                    st.markdown(f"**{student}**")
-                with col3:
-                    st.metric("XP", f"{xp:,}")
-                with col4:
-                    st.metric("문제", f"{solved}개")
+                elif step_type == "practice":
+                    # 실습 단계
+                    st.markdown(f"**과제:** {step_data['task']}")
 
-# ==================== 학생 관리 섹션 ====================
-elif st.session_state.view == "student_management":
-    st.header("👥 학생 관리")
-    st.markdown("등록된 모든 학생들을 관리합니다")
+                    if 'hint' in step_data:
+                        with st.expander("💡 힌트"):
+                            st.code(step_data['hint'], language="python")
 
-    st.divider()
+                    code_input = st.text_area(
+                        "코드를 작성하세요:",
+                        height=200,
+                        key=f"code_{step_key}",
+                        placeholder="# 파이썬 코드를 여기에 작성하세요"
+                    )
 
-    all_users = auth.get_all_users()
-    students = [u for u in all_users if u["nickname"].lower() != "bsh"]
+                    col1, col2 = st.columns(2)
 
-    if not students:
-        st.info("아직 등록된 학생이 없습니다.")
-    else:
-        st.subheader(f"📚 총 {len(students)}명의 학생")
+                    with col1:
+                        if st.button("실행해보기", key=f"run_{step_key}"):
+                            if code_input.strip():
+                                ok, output = ai_helper.run_code(code_input)
+                                if ok:
+                                    st.success("실행 결과:")
+                                    st.code(output, language="text")
+                                else:
+                                    st.error("에러가 발생했습니다:")
+                                    st.code(output, language="text")
+                            else:
+                                st.warning("코드를 작성해주세요.")
 
-        for student in students:
-            nickname = student["nickname"]
-            xp = student["xp"]
-            solved = student["solved"]
+                    with col2:
+                        if st.button("제출하기", type="primary", key=f"submit_{step_key}"):
+                            if not code_input.strip():
+                                st.warning("코드를 작성해주세요.")
+                            else:
+                                ok, output = ai_helper.run_code(code_input)
 
-            level, _, _ = level_info(xp)
-            tier_min, tier_name, _, _ = tier_of(level)
+                                # 검증 방식에 따라 확인
+                                validation = step_data.get('validation', 'output_contains')
+                                is_correct = False
 
-            stats = get_student_stats(nickname)
+                                if validation == "output_contains":
+                                    keywords = step_data.get('validation_keywords', [])
+                                    is_correct = all(kw in output for kw in keywords) if ok else False
 
-            with st.container(border=True):
-                col1, col2, col3, col4, col5 = st.columns(5)
+                                elif validation == "exact_output":
+                                    expected = step_data.get('expected_output', '')
+                                    is_correct = output.strip() == expected.strip() if ok else False
 
-                with col1:
-                    st.markdown(f"**{nickname}**")
-                with col2:
-                    st.metric("레벨", f"Lv. {level}")
-                with col3:
-                    st.metric("XP", f"{xp:,}")
-                with col4:
-                    st.metric("문제", f"{solved}개")
-                with col5:
-                    st.metric("활동", f"{stats['total_activities']}회")
+                                if is_correct:
+                                    st.success("✅ 정답입니다!")
+                                    current_step = step_num
+                                    survey.update_tutorial_step(st.session_state.user, selected_topic.id, current_step)
+                                    progress["solved"] += 1
+                                    add_xp(10)  # 실습 완료 보너스 XP
+                                    st.rerun()
+                                else:
+                                    st.error("다시 시도해주세요.")
+                                    if not ok:
+                                        st.code(output, language="text")
 
-                # 상세 통계
-                if st.button(f"📊 {nickname} 상세 보기", key=f"details_{nickname}"):
-                    with st.expander(f"{nickname}의 상세 활동", expanded=True):
-                        activities = get_student_activities(nickname, limit=10)
-                        if activities:
-                            for i, activity in enumerate(activities, 1):
-                                activity_type = activity.get("type", "unknown")
-                                details = activity.get("details", {})
-                                timestamp = activity.get("timestamp", "")
+                elif step_type == "explanation":
+                    # 설명 단계
+                    st.markdown(step_data['content'])
 
-                                st.markdown(f"**{i}. {activity_type}** ({timestamp[:19]})")
-                                st.json(details)
-                        else:
-                            st.info("활동 기록이 없습니다.")
+                    if is_current:
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("✅ 이해했어요", key=f"understand_{step_key}"):
+                                current_step = step_num
+                                survey.update_tutorial_step(st.session_state.user, selected_topic.id, current_step)
+
+                                # 튜토리얼 완료: 숙련도 업그레이드
+                                if current_step >= total_steps:
+                                    topic_mastery = progress.get("topic_mastery", {})
+                                    if topic_mastery.get(selected_topic.id, 0) < Mastery.BASIC.value:
+                                        topic_mastery[selected_topic.id] = Mastery.BASIC.value
+                                        progress["topic_mastery"] = topic_mastery
+                                        add_xp(20)  # 튜토리얼 완료 보너스
+                                        st.success(f"🎉 {selected_topic.name} 튜토리얼 완료! 숙련도: BASIC")
+
+                                st.rerun()
+
+                        with col2:
+                            if st.button("다음 주제로", key=f"next_topic_{step_key}"):
+                                st.session_state.view = "learning"
+                                st.rerun()

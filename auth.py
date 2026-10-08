@@ -40,7 +40,7 @@ def user_exists(nickname: str) -> bool:
     return nickname.lower() in {k.lower() for k in users.keys()}
 
 
-def create_user(nickname: str, password: str, is_host: bool = False) -> bool:
+def create_user(nickname: str, password: str) -> bool:
     """새 사용자 생성"""
     if user_exists(nickname):
         return False
@@ -49,7 +49,6 @@ def create_user(nickname: str, password: str, is_host: bool = False) -> bool:
     users[nickname] = {
         "password_hash": hash_password(password),
         "created_at": datetime.now().isoformat(),
-        "is_host": is_host,
     }
     save_users(users)
 
@@ -57,26 +56,6 @@ def create_user(nickname: str, password: str, is_host: bool = False) -> bool:
     (USER_DATA_DIR / nickname).mkdir(exist_ok=True)
 
     return True
-
-
-def is_host(nickname: str) -> bool:
-    """호스트(강사) 여부 확인"""
-    users = load_users()
-    for user_nickname, user_data in users.items():
-        if user_nickname.lower() == nickname.lower():
-            return user_data.get("is_host", False)
-    return False
-
-
-def set_host(nickname: str, is_host: bool = True) -> bool:
-    """사용자를 호스트로 설정/해제"""
-    users = load_users()
-    for user_nickname in users.keys():
-        if user_nickname.lower() == nickname.lower():
-            users[user_nickname]["is_host"] = is_host
-            save_users(users)
-            return True
-    return False
 
 
 def verify_password(nickname: str, password: str) -> bool:
@@ -113,6 +92,7 @@ def load_user_progress(nickname: str) -> dict:
 def save_user_progress(nickname: str, progress: dict):
     """사용자 진행도 저장"""
     progress_file = get_user_progress_file(nickname)
+    progress_file.parent.mkdir(parents=True, exist_ok=True)
     progress_file.write_text(json.dumps(progress, ensure_ascii=False, indent=2), encoding="utf-8")
 
 

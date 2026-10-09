@@ -140,8 +140,15 @@ st.set_page_config(page_title="PYTEST", page_icon="🐍", layout="centered")
 
 auth.init_data()
 
-# ==================== 로그인 화면 ====================
+# Session State 초기화
 if "user" not in st.session_state:
+    st.session_state.user = None
+    st.session_state.logged_in = False
+    st.session_state.view = None
+    st.session_state.progress = None
+
+# ==================== 로그인 화면 ====================
+if not st.session_state.get("logged_in") or st.session_state.user is None:
     st.title("🐍 PYTEST")
     st.caption("AI가 내는 파이썬 문제를 풀고 레벨을 올리세요!")
 
@@ -157,6 +164,7 @@ if "user" not in st.session_state:
         if st.button("로그인", type="primary", use_container_width=True):
             if login_nickname and login_password:
                 if auth.verify_password(login_nickname, login_password):
+                    # session_state를 먼저 모두 설정
                     st.session_state.user = login_nickname
                     st.session_state.progress = auth.load_user_progress(login_nickname)
                     st.session_state.problem = None
@@ -169,6 +177,7 @@ if "user" not in st.session_state:
                     else:
                         st.session_state.view = "dashboard"
 
+                    st.session_state.logged_in = True
                     st.success("✅ 로그인 성공!")
                     st.rerun()
                 else:

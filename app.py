@@ -454,16 +454,117 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 캐릭터 배경이면 펫 표시
+# 캐릭터 배경이면 귀여운 펫 표시
 if selected_bg_id == "moving_ultra":
-    pet_emojis = ["🐕", "🐱", "🐦", "🦅"]
-    pet_html = '<div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0;">'
-    for i, emoji in enumerate(pet_emojis * 2):  # 8마리의 펫
-        delay = (i * 0.5) % 8
-        top = (i * 15) % 80
-        left = (i * 20) % 90
-        pet_html += f'<div class="pet" style="top: {top}%; left: {left}%; animation-delay: {delay}s;">{emoji}</div>'
-    pet_html += '</div>'
+    pet_html = """
+    <div id="pet-container" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden;">
+    </div>
+
+    <svg id="dog-svg" style="display: none;" viewBox="0 0 80 80" width="60" height="60">
+        <!-- 강아지: 멍청하고 귀여운 느낌 -->
+        <circle cx="40" cy="45" r="25" fill="#D4A574"/>
+        <circle cx="25" cy="30" r="10" fill="#D4A574"/>
+        <circle cx="55" cy="30" r="10" fill="#D4A574"/>
+        <circle cx="35" cy="40" r="6" fill="#000"/>
+        <circle cx="45" cy="40" r="6" fill="#000"/>
+        <circle cx="35" cy="39" r="2" fill="#fff"/>
+        <circle cx="45" cy="39" r="2" fill="#fff"/>
+        <ellipse cx="40" cy="52" rx="3" ry="5" fill="#ff69b4"/>
+        <path d="M 38 55 Q 40 57 42 55" stroke="#000" stroke-width="1" fill="none"/>
+    </svg>
+
+    <svg id="cat-svg" style="display: none;" viewBox="0 0 80 80" width="60" height="60">
+        <!-- 고양이: 동글동글하고 멍청한 -->
+        <circle cx="40" cy="45" r="25" fill="#FFB6C1"/>
+        <polygon points="30,20 40,10 50,20" fill="#FFB6C1"/>
+        <polygon points="28,22 35,18 33,28" fill="#FFB6C1"/>
+        <polygon points="52,22 45,18 47,28" fill="#FFB6C1"/>
+        <circle cx="35" cy="40" r="6" fill="#000"/>
+        <circle cx="45" cy="40" r="6" fill="#000"/>
+        <circle cx="35" cy="39" r="2" fill="#fff"/>
+        <circle cx="45" cy="39" r="2" fill="#fff"/>
+        <line x1="25" y1="45" x2="15" y2="43" stroke="#000" stroke-width="1"/>
+        <line x1="55" y1="45" x2="65" y2="43" stroke="#000" stroke-width="1"/>
+    </svg>
+
+    <svg id="bird-svg" style="display: none;" viewBox="0 0 80 80" width="60" height="60">
+        <!-- 새: 작고 귀여운 -->
+        <circle cx="40" cy="45" r="18" fill="#87CEEB"/>
+        <circle cx="30" cy="35" r="12" fill="#87CEEB"/>
+        <circle cx="28" cy="32" r="5" fill="#000"/>
+        <circle cx="27" cy="31" r="2" fill="#fff"/>
+        <path d="M 38 45 L 50 48 L 48 45" fill="#FFA500"/>
+        <path d="M 50 50 L 55 55 L 52 55" stroke="#000" stroke-width="1" fill="none"/>
+    </svg>
+
+    <svg id="eagle-svg" style="display: none;" viewBox="0 0 80 80" width="60" height="60">
+        <!-- 독수리: 듬직하지만 멍청한 느낌 -->
+        <circle cx="40" cy="45" r="22" fill="#8B4513"/>
+        <circle cx="25" cy="30" r="10" fill="#8B4513"/>
+        <circle cx="55" cy="30" r="10" fill="#8B4513"/>
+        <circle cx="32" cy="38" r="7" fill="#000"/>
+        <circle cx="48" cy="38" r="7" fill="#000"/>
+        <circle cx="31" cy="37" r="2" fill="#fff"/>
+        <circle cx="47" cy="37" r="2" fill="#fff"/>
+        <path d="M 40 52 L 35 60 L 40 58 L 45 60" fill="#FFD700"/>
+    </svg>
+
+    <script>
+    class Pet {
+        constructor(x, y, svgId, name) {
+            this.x = x;
+            this.y = y;
+            this.vx = (Math.random() - 0.5) * 2;
+            this.vy = (Math.random() - 0.5) * 2;
+            this.svgId = svgId;
+            this.name = name;
+            this.element = null;
+            this.createElement();
+        }
+
+        createElement() {
+            const svg = document.getElementById(this.svgId);
+            this.element = svg.cloneNode(true);
+            this.element.style.display = "block";
+            this.element.style.position = "fixed";
+            this.element.style.left = this.x + "px";
+            this.element.style.top = this.y + "px";
+            this.element.style.pointerEvents = "none";
+            this.element.style.zIndex = "1";
+            document.getElementById("pet-container").appendChild(this.element);
+        }
+
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+
+            // 패널 충돌 (window 경계)
+            const margin = 60;
+            if (this.x < margin) { this.vx = Math.abs(this.vx); this.x = margin; }
+            if (this.x > window.innerWidth - margin) { this.vx = -Math.abs(this.vx); this.x = window.innerWidth - margin; }
+            if (this.y < margin) { this.vy = Math.abs(this.vy); this.y = margin; }
+            if (this.y > window.innerHeight - margin) { this.vy = -Math.abs(this.vy); this.y = window.innerHeight - margin; }
+
+            this.element.style.left = this.x + "px";
+            this.element.style.top = this.y + "px";
+        }
+    }
+
+    const pets = [
+        new Pet(Math.random() * window.innerWidth, Math.random() * window.innerHeight, "dog-svg", "강아지"),
+        new Pet(Math.random() * window.innerWidth, Math.random() * window.innerHeight, "cat-svg", "고양이"),
+        new Pet(Math.random() * window.innerWidth, Math.random() * window.innerHeight, "bird-svg", "새"),
+        new Pet(Math.random() * window.innerWidth, Math.random() * window.innerHeight, "eagle-svg", "독수리")
+    ];
+
+    function animate() {
+        pets.forEach(pet => pet.update());
+        requestAnimationFrame(animate);
+    }
+
+    animate();
+    </script>
+    """
     st.html(pet_html, unsafe_allow_html=True)
 
 # 복사/붙여넣기 방지: copy, cut, paste, 드래그 앤 드롭, 우클릭 메뉴를 막는다.

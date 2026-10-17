@@ -457,10 +457,10 @@ st.markdown(
 # 캐릭터 배경이면 귀여운 펫 표시
 if selected_bg_id == "moving_ultra":
     pet_html = """
-    <div id="pet-container" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden;">
+    <div id="pet-container" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 9999; overflow: hidden;">
     </div>
 
-    <svg id="dog-svg" style="display: none;" viewBox="0 0 80 80" width="60" height="60">
+    <svg id="dog-svg" style="display: none;" viewBox="0 0 80 80" width="100" height="100">
         <!-- 강아지: 멍청하고 귀여운 느낌 -->
         <circle cx="40" cy="45" r="25" fill="#D4A574"/>
         <circle cx="25" cy="30" r="10" fill="#D4A574"/>
@@ -473,7 +473,7 @@ if selected_bg_id == "moving_ultra":
         <path d="M 38 55 Q 40 57 42 55" stroke="#000" stroke-width="1" fill="none"/>
     </svg>
 
-    <svg id="cat-svg" style="display: none;" viewBox="0 0 80 80" width="60" height="60">
+    <svg id="cat-svg" style="display: none;" viewBox="0 0 80 80" width="100" height="100">
         <!-- 고양이: 동글동글하고 멍청한 -->
         <circle cx="40" cy="45" r="25" fill="#FFB6C1"/>
         <polygon points="30,20 40,10 50,20" fill="#FFB6C1"/>
@@ -487,7 +487,7 @@ if selected_bg_id == "moving_ultra":
         <line x1="55" y1="45" x2="65" y2="43" stroke="#000" stroke-width="1"/>
     </svg>
 
-    <svg id="bird-svg" style="display: none;" viewBox="0 0 80 80" width="60" height="60">
+    <svg id="bird-svg" style="display: none;" viewBox="0 0 80 80" width="100" height="100">
         <!-- 새: 작고 귀여운 -->
         <circle cx="40" cy="45" r="18" fill="#87CEEB"/>
         <circle cx="30" cy="35" r="12" fill="#87CEEB"/>
@@ -497,7 +497,7 @@ if selected_bg_id == "moving_ultra":
         <path d="M 50 50 L 55 55 L 52 55" stroke="#000" stroke-width="1" fill="none"/>
     </svg>
 
-    <svg id="eagle-svg" style="display: none;" viewBox="0 0 80 80" width="60" height="60">
+    <svg id="eagle-svg" style="display: none;" viewBox="0 0 80 80" width="100" height="100">
         <!-- 독수리: 듬직하지만 멍청한 느낌 -->
         <circle cx="40" cy="45" r="22" fill="#8B4513"/>
         <circle cx="25" cy="30" r="10" fill="#8B4513"/>
@@ -530,7 +530,9 @@ if selected_bg_id == "moving_ultra":
             this.element.style.left = this.x + "px";
             this.element.style.top = this.y + "px";
             this.element.style.pointerEvents = "none";
-            this.element.style.zIndex = "1";
+            this.element.style.zIndex = "9999";
+            this.element.id = ""; // 복제된 요소의 ID 제거
+            this.element.style.filter = "drop-shadow(0 2px 4px rgba(0,0,0,0.3))";
             document.getElementById("pet-container").appendChild(this.element);
         }
 
@@ -539,7 +541,7 @@ if selected_bg_id == "moving_ultra":
             this.y += this.vy;
 
             // 패널 충돌 (window 경계)
-            const margin = 60;
+            const margin = 100;
             if (this.x < margin) { this.vx = Math.abs(this.vx); this.x = margin; }
             if (this.x > window.innerWidth - margin) { this.vx = -Math.abs(this.vx); this.x = window.innerWidth - margin; }
             if (this.y < margin) { this.vy = Math.abs(this.vy); this.y = margin; }
@@ -1441,7 +1443,7 @@ elif st.session_state.view == "shop":
     st.divider()
 
     # 상점 탭
-    tab_bg, tab_outfit, tab_font = st.tabs(["🎨 배경", "👔 옷", "✍️ 글씨체"])
+    tab_bg, tab_outfit, tab_font, tab_chars = st.tabs(["🎨 배경", "👔 옷", "✍️ 글씨체", "🐕 캐릭터"])
 
     # ===== 배경 탭 =====
     with tab_bg:
@@ -1545,3 +1547,65 @@ elif st.session_state.view == "shop":
                 else:
                     st.button("구매", disabled=True, key=f"buy_font_dis_{font_id}")
             st.divider()
+
+    # ===== 캐릭터 탭 =====
+    with tab_chars:
+        st.subheader("🐕 캐릭터 소개")
+        st.markdown("**6000G 프리미엄 배경**을 구매하면 이 귀여운 펫들이 앱 전체에서 돌아다닙니다!")
+        st.divider()
+
+        # 캐릭터 설명
+        char_descriptions = {
+            "dog": {
+                "name": "🐕 강아지",
+                "personality": "명랑하고 친근한 친구",
+                "description": "항상 행복해 보이는 동글동글한 강아지. 어디든 따라다니며 응원해줄 거예요!",
+            },
+            "cat": {
+                "name": "🐱 고양이",
+                "personality": "까칠하지만 귀여운 친구",
+                "description": "뾰족한 귀가 매력인 고양이. 독립적이지만 속으로는 응원하고 있어요.",
+            },
+            "bird": {
+                "name": "🐦 새",
+                "personality": "작지만 씩씩한 친구",
+                "description": "작은 몸에 큰 용기를 가진 새. 빠르게 날아다니며 옆에서 격려합니다!",
+            },
+            "eagle": {
+                "name": "🦅 독수리",
+                "personality": "듬직하고 강한 친구",
+                "description": "우리의 안내자이자 수호자. 무엇이든 극복할 수 있도록 함께합니다.",
+            },
+        }
+
+        # 각 캐릭터를 2x2 그리드로 표시
+        cols = st.columns(2)
+        for idx, (char_id, char_info) in enumerate(char_descriptions.items()):
+            with cols[idx % 2]:
+                with st.container(border=True):
+                    # SVG 렌더링
+                    svg_map = {
+                        "dog": '<svg viewBox="0 0 80 80" width="150" height="150"><circle cx="40" cy="45" r="25" fill="#D4A574"/><circle cx="25" cy="30" r="10" fill="#D4A574"/><circle cx="55" cy="30" r="10" fill="#D4A574"/><circle cx="35" cy="40" r="6" fill="#000"/><circle cx="45" cy="40" r="6" fill="#000"/><circle cx="35" cy="39" r="2" fill="#fff"/><circle cx="45" cy="39" r="2" fill="#fff"/><ellipse cx="40" cy="52" rx="3" ry="5" fill="#ff69b4"/><path d="M 38 55 Q 40 57 42 55" stroke="#000" stroke-width="1" fill="none"/></svg>',
+                        "cat": '<svg viewBox="0 0 80 80" width="150" height="150"><circle cx="40" cy="45" r="25" fill="#FFB6C1"/><polygon points="30,20 40,10 50,20" fill="#FFB6C1"/><polygon points="28,22 35,18 33,28" fill="#FFB6C1"/><polygon points="52,22 45,18 47,28" fill="#FFB6C1"/><circle cx="35" cy="40" r="6" fill="#000"/><circle cx="45" cy="40" r="6" fill="#000"/><circle cx="35" cy="39" r="2" fill="#fff"/><circle cx="45" cy="39" r="2" fill="#fff"/><line x1="25" y1="45" x2="15" y2="43" stroke="#000" stroke-width="1"/><line x1="55" y1="45" x2="65" y2="43" stroke="#000" stroke-width="1"/></svg>',
+                        "bird": '<svg viewBox="0 0 80 80" width="150" height="150"><circle cx="40" cy="45" r="18" fill="#87CEEB"/><circle cx="30" cy="35" r="12" fill="#87CEEB"/><circle cx="28" cy="32" r="5" fill="#000"/><circle cx="27" cy="31" r="2" fill="#fff"/><path d="M 38 45 L 50 48 L 48 45" fill="#FFA500"/><path d="M 50 50 L 55 55 L 52 55" stroke="#000" stroke-width="1" fill="none"/></svg>',
+                        "eagle": '<svg viewBox="0 0 80 80" width="150" height="150"><circle cx="40" cy="45" r="22" fill="#8B4513"/><circle cx="25" cy="30" r="10" fill="#8B4513"/><circle cx="55" cy="30" r="10" fill="#8B4513"/><circle cx="32" cy="38" r="7" fill="#000"/><circle cx="48" cy="38" r="7" fill="#000"/><circle cx="31" cy="37" r="2" fill="#fff"/><circle cx="47" cy="37" r="2" fill="#fff"/><path d="M 40 52 L 35 60 L 40 58 L 45 60" fill="#FFD700"/></svg>',
+                    }
+                    st.html(f'<div style="text-align: center;">{svg_map[char_id]}</div>')
+
+                    st.markdown(f"**{char_info['name']}**")
+                    st.caption(f"_{char_info['personality']}_")
+                    st.markdown(char_info['description'])
+
+                    # 구매 버튼
+                    if progress.get("selected_background") == "moving_ultra":
+                        st.success("✅ 6000G 프리미엄 배경 소유중!")
+                    elif gold >= 6000:
+                        if st.button("프리미엄 배경 구매 (6000G)", key=f"buy_premium_{char_id}"):
+                            progress["gold"] -= 6000
+                            progress["owned_backgrounds"].append("moving_ultra")
+                            progress["selected_background"] = "moving_ultra"
+                            save_progress(progress)
+                            st.success("🎉 프리미엄 배경을 구매했습니다!")
+                            st.rerun()
+                    else:
+                        st.button("프리미엄 배경 구매 (6000G)", disabled=True)

@@ -79,7 +79,13 @@ def load_user_progress(nickname: str) -> dict:
     """사용자 진행도 로드 (게스트 진행도 자동 마이그레이션)"""
     progress_file = get_user_progress_file(nickname)
     if progress_file.exists():
-        return json.loads(progress_file.read_text(encoding="utf-8"))
+        progress = json.loads(progress_file.read_text(encoding="utf-8"))
+        # 기존 파일에 새 필드가 없으면 추가
+        if "daily_problems_solved" not in progress:
+            progress["daily_problems_solved"] = 0
+        if "last_daily_reset" not in progress:
+            progress["last_daily_reset"] = None
+        return progress
 
     # 게스트 진행도 확인
     guest_progress_file = Path(__file__).with_name("progress.json")
@@ -87,6 +93,10 @@ def load_user_progress(nickname: str) -> dict:
         try:
             guest_progress = json.loads(guest_progress_file.read_text(encoding="utf-8"))
             # 게스트 진행도를 사용자 계정으로 마이그레이션
+            if "daily_problems_solved" not in guest_progress:
+                guest_progress["daily_problems_solved"] = 0
+            if "last_daily_reset" not in guest_progress:
+                guest_progress["last_daily_reset"] = None
             save_user_progress(nickname, guest_progress)
             return guest_progress
         except (json.JSONDecodeError, IOError):
@@ -98,6 +108,8 @@ def load_user_progress(nickname: str) -> dict:
         "history": [],
         "topic_mastery": {},
         "current_topic": None,
+        "daily_problems_solved": 0,
+        "last_daily_reset": None,
     }
 
 

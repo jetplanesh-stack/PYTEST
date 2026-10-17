@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from datetime import datetime
 
 import streamlit as st
 
@@ -38,6 +39,8 @@ def load_progress() -> dict:
         "history": [],
         "topic_mastery": {},  # {"topic_id": mastery_level}
         "current_topic": None,
+        "daily_problems_solved": 0,
+        "last_daily_reset": None,
     }
 
 
@@ -46,6 +49,18 @@ def save_progress(progress: dict):
         auth.save_user_progress(st.session_state.user, progress)
     else:
         PROGRESS_FILE.write_text(json.dumps(progress, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def check_and_reset_daily_progress(progress: dict) -> dict:
+    """날짜가 바뀌었으면 일일 목표 초기화"""
+    today = datetime.now().strftime("%Y-%m-%d")
+    last_reset = progress.get("last_daily_reset")
+
+    if last_reset != today:
+        progress["daily_problems_solved"] = 0
+        progress["last_daily_reset"] = today
+
+    return progress
 
 
 def xp_needed(level: int) -> int:
@@ -122,6 +137,11 @@ def add_xp(amount: int):
     progress = st.session_state.progress
     before = level_info(progress["xp"])[0]
     progress["xp"] += amount
+
+    # 일일 목표 진행도 저장
+    progress["daily_problems_solved"] = st.session_state.get("daily_problems_solved", 0)
+    progress["last_daily_reset"] = datetime.now().strftime("%Y-%m-%d")
+
     save_progress(progress)
     after = level_info(progress["xp"])[0]
     st.toast(f"+{amount} XP 획득! 💫")
@@ -172,7 +192,10 @@ if not st.session_state.get("logged_in") or st.session_state.user is None:
                 if auth.verify_password(login_nickname, login_password):
                     # session_state를 먼저 모두 설정
                     st.session_state.user = login_nickname
-                    st.session_state.progress = auth.load_user_progress(login_nickname)
+                    progress = auth.load_user_progress(login_nickname)
+                    progress = check_and_reset_daily_progress(progress)
+                    st.session_state.progress = progress
+                    st.session_state.daily_problems_solved = progress.get("daily_problems_solved", 0)
                     st.session_state.problem = None
                     st.session_state.titles = []
 
@@ -217,11 +240,13 @@ if not st.session_state.get("logged_in") or st.session_state.user is None:
 
 # ==================== 메인 앱 ====================
 if "progress" not in st.session_state:
-    st.session_state.progress = auth.load_user_progress(st.session_state.user)
+    progress = auth.load_user_progress(st.session_state.user)
+    progress = check_and_reset_daily_progress(progress)
+    st.session_state.progress = progress
+    st.session_state.daily_problems_solved = progress.get("daily_problems_solved", 0)
     st.session_state.problem = None
     st.session_state.titles = []
     st.session_state.view = "dashboard"  # 처음 로그인 후 대시보드 표시
-    st.session_state.daily_problems_solved = 0
 
 progress = st.session_state.progress
 level, cur_xp, need_xp = level_info(progress["xp"])
@@ -382,6 +407,14 @@ if st.session_state.view == "dashboard":
 # ==================== 학습 경로 섹션 ====================
 elif st.session_state.view == "learning":
     st.header("📚 학습 경로")
+
+    # 📊 오늘의 도전
+    st.markdown("### 📊 오늘의 도전")
+    daily_goal = 5
+    daily_solved = st.session_state.get("daily_problems_solved", 0)
+    st.progress(min(daily_solved / daily_goal, 1.0), text=f"{daily_solved}/{daily_goal} 문제")
+
+    st.divider()
 
     topic_mastery = {k: Mastery(v) for k, v in progress.get("topic_mastery", {}).items()}
     stats = LearningPath.get_learning_stats(topic_mastery)

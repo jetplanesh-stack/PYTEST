@@ -124,9 +124,14 @@ def add_xp(amount: int):
     progress["xp"] += amount
     save_progress(progress)
     after = level_info(progress["xp"])[0]
-    st.toast(f"+{amount} XP")
+    st.toast(f"+{amount} XP 획득! 💫")
     if after > before:
         st.session_state.level_up = (after, tier_of(after)[1])
+
+    # 일일 목표 달성
+    daily_solved = st.session_state.get("daily_problems_solved", 0)
+    if daily_solved == 5:
+        st.session_state.daily_goal_achieved = True
 
 
 def subjective_xp(difficulty: str, grade: int) -> int:
@@ -146,6 +151,7 @@ if "user" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.view = None
     st.session_state.progress = None
+    st.session_state.daily_problems_solved = 0
 
 # ==================== 로그인 화면 ====================
 if not st.session_state.get("logged_in") or st.session_state.user is None:
@@ -215,6 +221,7 @@ if "progress" not in st.session_state:
     st.session_state.problem = None
     st.session_state.titles = []
     st.session_state.view = "dashboard"  # 처음 로그인 후 대시보드 표시
+    st.session_state.daily_problems_solved = 0
 
 progress = st.session_state.progress
 level, cur_xp, need_xp = level_info(progress["xp"])
@@ -316,9 +323,20 @@ with st.sidebar:
     st.divider()
 
     st.markdown(f'<span class="tier-badge">{tier_name}</span>', unsafe_allow_html=True)
-    st.subheader(f"Lv. {level}")
+    st.subheader(f"Lv. {level} ✨")
     st.progress(cur_xp / need_xp, text=f"{cur_xp} / {need_xp} XP")
     st.caption(f"누적 경험치 {progress['xp']} XP · 맞힌 문제 {progress['solved']}개")
+
+    st.divider()
+
+    # 📊 오늘의 도전
+    st.markdown("### 📊 오늘의 도전")
+    daily_goal = 5
+    daily_solved = st.session_state.get("daily_problems_solved", 0)
+    st.progress(min(daily_solved / daily_goal, 1.0), text=f"{daily_solved}/{daily_goal} 문제")
+
+    st.divider()
+
     st.caption("🟢 Beginner Lv.1~4 · 🟡 Student Lv.5~9 · 🔴 Expert Lv.10+")
 
     st.divider()
@@ -423,10 +441,40 @@ elif st.session_state.view == "learning":
 
 # ==================== 문제 풀이 섹션 ====================
 elif st.session_state.view == "problem":
+    if st.session_state.get("daily_goal_achieved"):
+        st.session_state.pop("daily_goal_achieved")
+        st.snow()
+        col1, col2, col3 = st.columns(3)
+        with col2:
+            st.markdown("<div style='text-align: center; font-size: 2em; font-weight: bold; color: #ff6b6b;'>❄️ 일일 목표 달성! ❄️</div>", unsafe_allow_html=True)
+            st.markdown("<div style='text-align: center; font-size: 1.2em;'>5개 문제를 모두 풀었습니다! 🎯</div>", unsafe_allow_html=True)
+            st.markdown("<div style='text-align: center; font-size: 1em; color: #666;'>내일도 도전해보세요! 💪</div>", unsafe_allow_html=True)
+
     if st.session_state.get("level_up"):
         new_level, new_tier = st.session_state.pop("level_up")
         st.balloons()
-        st.success(f"🎉 레벨 업! Lv.{new_level} ({new_tier})")
+        col1, col2, col3 = st.columns(3)
+        with col2:
+            st.markdown("""
+            <style>
+            @keyframes levelUpPulse {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.2); }
+                100% { transform: scale(1); }
+            }
+            .level-up-text {
+                animation: levelUpPulse 0.6s ease-in-out;
+                font-size: 2.5em;
+                font-weight: bold;
+                text-align: center;
+            }
+            </style>
+            <div class="level-up-text">
+            🎉 레벨 업! 🎉<br>
+            <span style="color: #d32f2f; font-size: 1.2em;">Lv.{}</span>
+            </div>
+            """.format(new_level), unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align: center; font-size: 1.3em;'>{new_tier} 달성! 🏆</div>", unsafe_allow_html=True)
 
     current = st.session_state.problem
     if current is None:
@@ -491,6 +539,7 @@ elif st.session_state.view == "problem":
                 base = BASE_XP["객관식"][current["difficulty"]]
                 xp = base if current["attempts"] == 1 else base // 2  # 재도전 정답은 절반
                 progress["solved"] += 1
+                st.session_state.daily_problems_solved += 1
                 record("정답", xp)
                 update_topic_mastery(True, current["attempts"])
                 add_xp(xp)
@@ -567,6 +616,7 @@ elif st.session_state.view == "problem":
                     gained //= 2  # 모범 답안을 보고 따라 적은 뒤 맞힌 경우 절반
                 if not current["solved"]:
                     progress["solved"] += 1
+                    st.session_state.daily_problems_solved += 1
                 current["solved"] = True
                 current["best_grade"] = new_best
                 record(f"정답 {grading.grade}등급", gained)

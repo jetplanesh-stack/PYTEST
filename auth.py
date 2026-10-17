@@ -113,6 +113,11 @@ def load_user_progress(nickname: str) -> dict:
         "gold": 0,
         "selected_background": "default",
         "owned_backgrounds": ["default"],
+        "selected_character": "dog",
+        "owned_outfits": [],
+        "character_outfits": {},
+        "selected_font": "default",
+        "owned_fonts": ["default"],
     }
 
 

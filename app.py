@@ -14,6 +14,30 @@ from learning_paths import LearningPath, Mastery, TOPIC_BY_ID
 
 PROGRESS_FILE = Path(__file__).with_name("progress.json")
 
+# 캐릭터 데이터
+CHARACTERS = {
+    "dog": {"name": "🐕 강아지", "emoji": "🐕", "color": "#D4A574"},
+    "cat": {"name": "🐱 고양이", "emoji": "🐱", "color": "#FFB6C1"},
+    "bird": {"name": "🐦 새", "emoji": "🐦", "color": "#87CEEB"},
+    "eagle": {"name": "🦅 독수리", "emoji": "🦅", "color": "#8B4513"},
+}
+
+OUTFITS = {
+    "suit": {"name": "정장", "price": 50},
+    "hat": {"name": "모자", "price": 50},
+    "scarf": {"name": "스카프", "price": 50},
+    "glasses": {"name": "안경", "price": 50},
+    "flower": {"name": "꽃 장식", "price": 100},
+}
+
+FONTS = {
+    "default": {"name": "기본", "price": 0, "font_family": "Arial"},
+    "comic": {"name": "만화체", "price": 50, "font_family": "'Comic Sans MS'"},
+    "gothic": {"name": "고딕체", "price": 50, "font_family": "'Arial Black'"},
+    "mono": {"name": "고정폭", "price": 50, "font_family": "'Courier New'"},
+    "serif": {"name": "세리프", "price": 50, "font_family": "'Georgia'"},
+}
+
 # 문제 종류 / 난이도별 기본 경험치
 BASE_XP = {
     "객관식": {"초급": 10, "중급": 20, "고난도": 35},
@@ -77,6 +101,43 @@ BACKGROUNDS = {
         "text": "#000",
         "description": "따뜻한 석양 테마"
     },
+    "moving_slow": {
+        "name": "✨ 그라데이션 (1000G)",
+        "price": 1000,
+        "bg_color": "#667eea",
+        "accent": "#764ba2",
+        "text": "#fff",
+        "description": "천천히 흐르는 색상 그라데이션",
+        "animation": "gradient-shift 20s ease infinite"
+    },
+    "moving_medium": {
+        "name": "⚡ 기본 애니메이션 (2500G)",
+        "price": 2500,
+        "bg_color": "#f093fb",
+        "accent": "#f5576c",
+        "text": "#fff",
+        "description": "중간 속도로 움직이는 애니메이션",
+        "animation": "gradient-shift 12s ease infinite"
+    },
+    "moving_fast": {
+        "name": "💨 고난도 애니메이션 (4000G)",
+        "price": 4000,
+        "bg_color": "#4facfe",
+        "accent": "#00f2fe",
+        "text": "#fff",
+        "description": "빠르게 움직이는 고난도 애니메이션",
+        "animation": "gradient-shift 8s ease infinite"
+    },
+    "moving_ultra": {
+        "name": "🐕 캐릭터 배경 (6000G)",
+        "price": 6000,
+        "bg_color": "#ffd89b",
+        "accent": "#ff6b6b",
+        "text": "#333",
+        "description": "앱 전체에서 뛰어다니는 귀여운 펫들! 귀엽고 동글동글한 강아지/고양이/새/독수리",
+        "animation": "gradient-shift 10s ease infinite",
+        "has_character": True
+    },
 }
 
 
@@ -89,13 +150,18 @@ def load_progress() -> dict:
         "xp": 0,
         "solved": 0,
         "history": [],
-        "topic_mastery": {},  # {"topic_id": mastery_level}
+        "topic_mastery": {},
         "current_topic": None,
         "daily_problems_solved": 0,
         "last_daily_reset": None,
         "gold": 0,
         "selected_background": "default",
-        "owned_backgrounds": ["default"],  # 소유한 배경 목록
+        "owned_backgrounds": ["default"],
+        "selected_character": "dog",
+        "owned_outfits": set(),
+        "character_outfits": {},  # {"dog": "suit", "cat": "hat", ...}
+        "selected_font": "default",
+        "owned_fonts": ["default"],
     }
 
 
@@ -317,19 +383,64 @@ _, tier_name, bg_color, accent = tier_of(level)
 
 # 선택된 배경 적용 (있으면 배경색 사용)
 selected_bg_id = progress.get("selected_background", "default")
+animation = ""
 if selected_bg_id in BACKGROUNDS:
     selected_bg = BACKGROUNDS[selected_bg_id]
     bg_color = selected_bg["bg_color"]
     accent = selected_bg["accent"]
     text_color = selected_bg["text"]
+    animation = selected_bg.get("animation", "")
 else:
     text_color = "#000"
 
-# 배경색 적용 (선택한 배경 또는 티어)
+# 배경색 + 애니메이션 적용
+animation_keyframes = ""
+if animation:
+    animation_keyframes = """
+    @keyframes gradient-shift {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+    """
+
+# 캐릭터 배경의 경우 펫 애니메이션 추가
+pet_animation = ""
+if selected_bg_id == "moving_ultra":
+    pet_animation = """
+    @keyframes float-around {
+        0% { transform: translate(0, 0); }
+        25% { transform: translate(100px, -50px); }
+        50% { transform: translate(50px, 100px); }
+        75% { transform: translate(-100px, 50px); }
+        100% { transform: translate(0, 0); }
+    }
+    .pet {
+        position: fixed;
+        font-size: 3em;
+        pointer-events: none;
+        z-index: 0;
+        animation: float-around 8s ease-in-out infinite;
+    }
+    """
+
+# 선택된 글씨체
+selected_font_id = progress.get("selected_font", "default")
+selected_font = FONTS.get(selected_font_id, FONTS["default"])
+font_family = selected_font.get("font_family", "Arial")
+
 st.markdown(
     f"""
     <style>
-    .stApp {{ background-color: {bg_color}; color: {text_color}; }}
+    {animation_keyframes}
+    {pet_animation}
+    .stApp {{
+        background: linear-gradient(-45deg, {bg_color}, {accent}, {bg_color});
+        background-size: 400% 400%;
+        {f'animation: {animation};' if animation else 'background-color: ' + bg_color + ';'}
+        color: {text_color};
+        font-family: {font_family};
+    }}
     .tier-badge {{
         display: inline-block; padding: 4px 14px; border-radius: 999px;
         background: {accent}; color: white; font-weight: 700; letter-spacing: .5px;
@@ -342,6 +453,18 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+# 캐릭터 배경이면 펫 표시
+if selected_bg_id == "moving_ultra":
+    pet_emojis = ["🐕", "🐱", "🐦", "🦅"]
+    pet_html = '<div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0;">'
+    for i, emoji in enumerate(pet_emojis * 2):  # 8마리의 펫
+        delay = (i * 0.5) % 8
+        top = (i * 15) % 80
+        left = (i * 20) % 90
+        pet_html += f'<div class="pet" style="top: {top}%; left: {left}%; animation-delay: {delay}s;">{emoji}</div>'
+    pet_html += '</div>'
+    st.html(pet_html, unsafe_allow_html=True)
 
 # 복사/붙여넣기 방지: copy, cut, paste, 드래그 앤 드롭, 우클릭 메뉴를 막는다.
 st.html(
@@ -457,6 +580,24 @@ with st.sidebar:
     recommended = LearningPath.get_recommended_next(topic_mastery, level)
     if recommended:
         st.info(f"📚 추천: **{recommended.name}**\n\n{recommended.description[:60]}...")
+
+    st.divider()
+
+    # 🎨 글씨체 선택
+    st.markdown("### 🎨 글씨체")
+    font_options = list(FONTS.keys())
+    font_names = [f"{FONTS[f]['name']} ({FONTS[f]['price']}G)" for f in font_options]
+    selected_font_idx = font_options.index(progress.get("selected_font", "default"))
+    selected_font = st.selectbox("글씨체 선택", font_options, index=selected_font_idx,
+                                 format_func=lambda x: font_names[font_options.index(x)],
+                                 key="font_select")
+    if selected_font != progress.get("selected_font"):
+        if selected_font in progress.get("owned_fonts", ["default"]):
+            progress["selected_font"] = selected_font
+            save_progress(progress)
+            st.rerun()
+        else:
+            st.warning(f"이 글씨체를 보유하지 않았습니다. (가격: {FONTS[selected_font]['price']}G)")
 
     st.divider()
     kind = st.radio("문제 종류", ["객관식", "주관식"], horizontal=True)
@@ -1188,59 +1329,118 @@ elif st.session_state.view == "tutorial":
                             st.session_state.view = "learning"
                             st.rerun()
 
-# ==================== 배경 상점 섹션 ====================
+# ==================== 상점 섹션 ====================
 elif st.session_state.view == "shop":
-    st.header("🛍️ 배경 상점")
-    st.markdown("골드로 배경을 구매하고 테마를 바꿔보세요!")
+    st.header("🛍️ 상점")
+    st.markdown("골드로 배경, 옷, 글씨체를 구매해보세요!")
 
     gold = progress.get("gold", 0)
     st.markdown(f"## 보유 골드: **{gold}G**")
 
     st.divider()
 
-    owned = set(progress.get("owned_backgrounds", ["default"]))
-    selected = progress.get("selected_background", "default")
+    # 상점 탭
+    tab_bg, tab_outfit, tab_font = st.tabs(["🎨 배경", "👔 옷", "✍️ 글씨체"])
 
-    col_left, col_right = st.columns(2)
+    # ===== 배경 탭 =====
+    with tab_bg:
+        owned = set(progress.get("owned_backgrounds", ["default"]))
+        selected = progress.get("selected_background", "default")
 
-    with col_left:
-        st.subheader("📦 보유 중인 배경")
-        for bg_id in owned:
-            if bg_id in BACKGROUNDS:
-                bg = BACKGROUNDS[bg_id]
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    if bg_id == selected:
-                        st.markdown(f"✅ **{bg['name']}** (사용 중)")
-                    else:
-                        st.markdown(f"{bg['name']}")
-                with col2:
-                    if bg_id != selected:
-                        if st.button("적용", key=f"select_{bg_id}"):
-                            progress["selected_background"] = bg_id
-                            save_progress(progress)
-                            st.success(f"{bg['name']}으로 변경되었습니다!")
-                            st.rerun()
+        col_left, col_right = st.columns(2)
 
-    with col_right:
-        st.subheader("🆕 구매 가능한 배경")
-        for bg_id, bg in BACKGROUNDS.items():
-            if bg_id not in owned and bg_id != "default":
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.markdown(f"**{bg['name']}**")
-                    st.caption(bg['description'])
-                    st.caption(f"💰 가격: {bg['price']}G")
-                with col2:
-                    if gold >= bg['price']:
-                        if st.button("구매", key=f"buy_{bg_id}"):
-                            progress["gold"] -= bg['price']
-                            progress["owned_backgrounds"].append(bg_id)
-                            save_progress(progress)
-                            st.success(f"{bg['name']}을(를) 구매했습니다!")
-                            st.rerun()
-                    else:
-                        st.button("구매", disabled=True, key=f"buy_disabled_{bg_id}")
-                        st.caption(f"💬 {bg['price'] - gold}G 더 필요")
+        with col_left:
+            st.subheader("📦 보유 중인 배경")
+            for bg_id in owned:
+                if bg_id in BACKGROUNDS:
+                    bg = BACKGROUNDS[bg_id]
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        if bg_id == selected:
+                            st.markdown(f"✅ **{bg['name']}** (사용 중)")
+                        else:
+                            st.markdown(f"{bg['name']}")
+                    with col2:
+                        if bg_id != selected:
+                            if st.button("적용", key=f"select_{bg_id}"):
+                                progress["selected_background"] = bg_id
+                                save_progress(progress)
+                                st.success(f"{bg['name']}으로 변경되었습니다!")
+                                st.rerun()
 
-                st.divider()
+        with col_right:
+            st.subheader("🆕 구매 가능한 배경")
+            for bg_id, bg in BACKGROUNDS.items():
+                if bg_id not in owned and bg_id != "default":
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.markdown(f"**{bg['name']}**")
+                        st.caption(bg['description'])
+                        st.caption(f"💰 가격: {bg['price']}G")
+                    with col2:
+                        if gold >= bg['price']:
+                            if st.button("구매", key=f"buy_{bg_id}"):
+                                progress["gold"] -= bg['price']
+                                progress["owned_backgrounds"].append(bg_id)
+                                save_progress(progress)
+                                st.success(f"{bg['name']}을(를) 구매했습니다!")
+                                st.rerun()
+                        else:
+                            st.button("구매", disabled=True, key=f"buy_disabled_{bg_id}")
+                            st.caption(f"💬 {bg['price'] - gold}G 더 필요")
+
+                    st.divider()
+
+    # ===== 옷 탭 =====
+    with tab_outfit:
+        st.subheader("👔 캐릭터 옷")
+        st.markdown("캐릭터에게 옷을 입혀주세요! (50~100G)")
+
+        owned_outfits = progress.get("owned_outfits", [])
+
+        for outfit_id, outfit in OUTFITS.items():
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col1:
+                st.markdown(f"**{outfit['name']}** 👔")
+            with col2:
+                st.caption(f"{outfit['price']}G")
+            with col3:
+                if outfit_id in owned_outfits:
+                    st.markdown("✅")
+                elif gold >= outfit['price']:
+                    if st.button("구매", key=f"buy_outfit_{outfit_id}"):
+                        progress["gold"] -= outfit['price']
+                        progress["owned_outfits"].append(outfit_id)
+                        save_progress(progress)
+                        st.success(f"{outfit['name']}을(를) 구매했습니다!")
+                        st.rerun()
+                else:
+                    st.button("구매", disabled=True, key=f"buy_outfit_dis_{outfit_id}")
+            st.divider()
+
+    # ===== 글씨체 탭 =====
+    with tab_font:
+        st.subheader("✍️ 글씨체")
+        st.markdown("앱의 글씨체를 변경해보세요! (50~100G)")
+
+        owned_fonts = progress.get("owned_fonts", ["default"])
+
+        for font_id, font in FONTS.items():
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col1:
+                st.markdown(f"**{font['name']}** ✍️")
+            with col2:
+                st.caption(f"{font['price']}G")
+            with col3:
+                if font_id in owned_fonts:
+                    st.markdown("✅")
+                elif gold >= font['price']:
+                    if st.button("구매", key=f"buy_font_{font_id}"):
+                        progress["gold"] -= font['price']
+                        progress["owned_fonts"].append(font_id)
+                        save_progress(progress)
+                        st.success(f"{font['name']}을(를) 구매했습니다!")
+                        st.rerun()
+                else:
+                    st.button("구매", disabled=True, key=f"buy_font_dis_{font_id}")
+            st.divider()

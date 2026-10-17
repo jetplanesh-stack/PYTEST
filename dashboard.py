@@ -102,7 +102,7 @@ def get_achievement_badges(progress: dict) -> list:
     return badges
 
 
-def show_welcome_dashboard(nickname: str, progress: dict):
+def show_welcome_dashboard(nickname: str, progress: dict, save_progress=None):
     """환영 대시보드"""
 
     # 정보 수집
@@ -140,6 +140,32 @@ def show_welcome_dashboard(nickname: str, progress: dict):
         progress_pct = level_info["progress"] * 100
         st.metric("다음 레벨까지", f"{level_info['current_xp']}/{level_info['next_xp']} XP")
         st.progress(level_info["progress"], text=f"{progress_pct:.0f}%")
+
+    st.divider()
+
+    # 모드 선택
+    st.subheader("🎮 학습 모드")
+    col_mode1, col_mode2, col_mode3 = st.columns(3)
+
+    current_mode = progress.get("mode", "student")
+
+    with col_mode1:
+        if st.button("👨‍🎓 학생용", use_container_width=True,
+                     type="primary" if current_mode == "student" else "secondary"):
+            progress["mode"] = "student"
+            st.rerun()
+
+    with col_mode2:
+        if st.button("👨‍💼 전문가용", use_container_width=True,
+                     type="primary" if current_mode == "expert" else "secondary"):
+            progress["mode"] = "expert"
+            st.rerun()
+
+    with col_mode3:
+        if current_mode == "student":
+            st.caption("🟢 기초부터 체계적으로 학습합니다")
+        else:
+            st.caption("🔴 고급 문제부터 시작합니다")
 
     st.divider()
 

@@ -118,6 +118,7 @@ def load_user_progress(nickname: str) -> dict:
         "character_outfits": {},
         "selected_font": "default",
         "owned_fonts": ["default"],
+        "mode": "student",
     }
 
 

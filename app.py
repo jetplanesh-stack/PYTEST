@@ -704,8 +704,24 @@ with st.sidebar:
 
     st.divider()
     kind = st.radio("문제 종류", ["객관식", "주관식"], horizontal=True)
-    difficulty = st.radio("난이도", ["초급", "중급", "고난도"], horizontal=True)
-    st.caption(f"기본 경험치: {BASE_XP[kind][difficulty]} XP")
+
+    # 모드에 따라 기본 난이도 설정
+    current_mode = progress.get("mode", "student")
+    default_difficulty = "초급" if current_mode == "student" else "고난도"
+    difficulty_options = ["초급", "중급", "고난도"]
+    default_idx = difficulty_options.index(default_difficulty)
+
+    difficulty = st.radio("난이도", difficulty_options, horizontal=True, index=default_idx)
+
+    # 모드에 따라 경험치 보너스
+    base_xp = BASE_XP[kind][difficulty]
+    xp_bonus = base_xp * 0.5 if current_mode == "expert" else 0
+    total_xp = base_xp + int(xp_bonus)
+
+    if current_mode == "expert":
+        st.caption(f"기본 경험치: {base_xp} XP → 전문가 보너스: +{int(xp_bonus)} XP = **{total_xp} XP** 🔥")
+    else:
+        st.caption(f"기본 경험치: {base_xp} XP")
 
     if st.button("새 문제 출제", type="primary", use_container_width=True):
         with st.spinner("AI가 문제를 만드는 중..."):
@@ -732,7 +748,7 @@ with st.sidebar:
 
 # ==================== 홈 대시보드 섹션 ====================
 if st.session_state.view == "dashboard":
-    dashboard.show_welcome_dashboard(st.session_state.user, st.session_state.progress)
+    dashboard.show_welcome_dashboard(st.session_state.user, st.session_state.progress, save_progress)
 
 # ==================== 학습 경로 섹션 ====================
 elif st.session_state.view == "learning":
@@ -1608,4 +1624,4 @@ elif st.session_state.view == "shop":
                             st.success("🎉 프리미엄 배경을 구매했습니다!")
                             st.rerun()
                     else:
-                        st.button("프리미엄 배경 구매 (6000G)", disabled=True)
+                        st.button("프리미엄 배경 구매 (6000G)", disabled=True, key=f"buy_premium_dis_{char_id}")

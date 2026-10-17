@@ -110,6 +110,9 @@ def load_user_progress(nickname: str) -> dict:
         "current_topic": None,
         "daily_problems_solved": 0,
         "last_daily_reset": None,
+        "gold": 0,
+        "selected_background": "default",
+        "owned_backgrounds": ["default"],
     }
 
 

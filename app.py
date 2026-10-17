@@ -27,6 +27,58 @@ TIERS = [
     (1, "Beginner", "#e6f6e6", "#2e7d32"),
 ]
 
+# 배경 테마: {id: {name, price, bg_color, accent_color, text_color, description}}
+BACKGROUNDS = {
+    "default": {
+        "name": "🌿 기본 테마",
+        "price": 0,
+        "bg_color": "#e6f6e6",
+        "accent": "#2e7d32",
+        "text": "#000",
+        "description": "기본적이고 편안한 녹색 테마"
+    },
+    "purple": {
+        "name": "💜 보라색 테마",
+        "price": 200,
+        "bg_color": "#f3e5f5",
+        "accent": "#7b1fa2",
+        "text": "#000",
+        "description": "신비로운 보라색 테마"
+    },
+    "blue": {
+        "name": "💙 하늘색 테마",
+        "price": 200,
+        "bg_color": "#e3f2fd",
+        "accent": "#1976d2",
+        "text": "#000",
+        "description": "차분한 하늘색 테마"
+    },
+    "pink": {
+        "name": "💗 핑크 테마",
+        "price": 200,
+        "bg_color": "#fce4ec",
+        "accent": "#c2185b",
+        "text": "#000",
+        "description": "밝고 상큼한 핑크 테마"
+    },
+    "dark": {
+        "name": "🌙 다크 테마",
+        "price": 300,
+        "bg_color": "#1a1a1a",
+        "accent": "#64b5f6",
+        "text": "#fff",
+        "description": "눈이 편한 다크 테마"
+    },
+    "sunset": {
+        "name": "🌅 석양 테마",
+        "price": 300,
+        "bg_color": "#fff3e0",
+        "accent": "#e65100",
+        "text": "#000",
+        "description": "따뜻한 석양 테마"
+    },
+}
+
 
 # ---------- 진행 상황 (레벨 / 경험치) ----------
 
@@ -41,6 +93,9 @@ def load_progress() -> dict:
         "current_topic": None,
         "daily_problems_solved": 0,
         "last_daily_reset": None,
+        "gold": 0,
+        "selected_background": "default",
+        "owned_backgrounds": ["default"],  # 소유한 배경 목록
     }
 
 
@@ -131,12 +186,13 @@ def update_topic_mastery(solved: bool, attempts: int, grade: int | None = None):
             break
 
 
-def add_xp(amount: int):
+def add_xp(amount: int, gold: int = 100):
     if amount <= 0:
         return
     progress = st.session_state.progress
     before = level_info(progress["xp"])[0]
     progress["xp"] += amount
+    progress["gold"] = progress.get("gold", 0) + gold
 
     # 일일 목표 진행도 저장
     progress["daily_problems_solved"] = st.session_state.get("daily_problems_solved", 0)
@@ -144,7 +200,7 @@ def add_xp(amount: int):
 
     save_progress(progress)
     after = level_info(progress["xp"])[0]
-    st.toast(f"+{amount} XP 획득! 💫")
+    st.toast(f"+{amount} XP · +{gold}G 획득! 💫")
     if after > before:
         st.session_state.level_up = (after, tier_of(after)[1])
 
@@ -252,11 +308,21 @@ progress = st.session_state.progress
 level, cur_xp, need_xp = level_info(progress["xp"])
 _, tier_name, bg_color, accent = tier_of(level)
 
-# 티어별 배경색 (Beginner 초록 / Student 노랑 / Expert 빨강)
+# 선택된 배경 적용 (있으면 배경색 사용)
+selected_bg_id = progress.get("selected_background", "default")
+if selected_bg_id in BACKGROUNDS:
+    selected_bg = BACKGROUNDS[selected_bg_id]
+    bg_color = selected_bg["bg_color"]
+    accent = selected_bg["accent"]
+    text_color = selected_bg["text"]
+else:
+    text_color = "#000"
+
+# 배경색 적용 (선택한 배경 또는 티어)
 st.markdown(
     f"""
     <style>
-    .stApp {{ background-color: {bg_color}; }}
+    .stApp {{ background-color: {bg_color}; color: {text_color}; }}
     .tier-badge {{
         display: inline-block; padding: 4px 14px; border-radius: 999px;
         background: {accent}; color: white; font-weight: 700; letter-spacing: .5px;
@@ -332,6 +398,13 @@ if col6.button("🎯 진도 설정", use_container_width=True,
     st.session_state.view = "progress_survey"
     st.rerun()
 
+col_shop = st.columns([1, 5])
+with col_shop[0]:
+    if st.button("🛍️ 상점", use_container_width=True,
+                 type="primary" if st.session_state.view == "shop" else "secondary"):
+        st.session_state.view = "shop"
+        st.rerun()
+
 st.divider()
 
 # --- 사이드바: 레벨 & 설정 ---
@@ -359,6 +432,12 @@ with st.sidebar:
     daily_goal = 5
     daily_solved = st.session_state.get("daily_problems_solved", 0)
     st.progress(min(daily_solved / daily_goal, 1.0), text=f"{daily_solved}/{daily_goal} 문제")
+
+    st.divider()
+
+    # 💰 골드
+    gold = progress.get("gold", 0)
+    st.markdown(f"### 💰 골드: **{gold}G**")
 
     st.divider()
 
@@ -441,7 +520,8 @@ elif st.session_state.view == "learning":
             continue
 
         icon = "🟢" if difficulty == "초급" else "🟡" if difficulty == "중급" else "🔴"
-        with st.expander(f"{icon} {difficulty} ({len([t for t in topics if topic_mastery.get(t.id) != Mastery.NOT_STARTED])}/{len(topics)} 진행)"):
+        completed = len([t for t in topics if topic_mastery.get(t.id) != Mastery.NOT_STARTED])
+        with st.expander(f"{icon} {difficulty} ({completed}/{len(topics)}):"):
             for topic in topics:
                 mastery = topic_mastery.get(topic.id, Mastery.NOT_STARTED)
                 unlocked = topic.is_unlocked(topic_mastery)
@@ -1099,3 +1179,60 @@ elif st.session_state.view == "tutorial":
                         if st.button("다음 주제로", key=f"next_topic_{step_key}"):
                             st.session_state.view = "learning"
                             st.rerun()
+
+# ==================== 배경 상점 섹션 ====================
+elif st.session_state.view == "shop":
+    st.header("🛍️ 배경 상점")
+    st.markdown("골드로 배경을 구매하고 테마를 바꿔보세요!")
+
+    gold = progress.get("gold", 0)
+    st.markdown(f"## 보유 골드: **{gold}G**")
+
+    st.divider()
+
+    owned = set(progress.get("owned_backgrounds", ["default"]))
+    selected = progress.get("selected_background", "default")
+
+    col_left, col_right = st.columns(2)
+
+    with col_left:
+        st.subheader("📦 보유 중인 배경")
+        for bg_id in owned:
+            if bg_id in BACKGROUNDS:
+                bg = BACKGROUNDS[bg_id]
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    if bg_id == selected:
+                        st.markdown(f"✅ **{bg['name']}** (사용 중)")
+                    else:
+                        st.markdown(f"{bg['name']}")
+                with col2:
+                    if bg_id != selected:
+                        if st.button("적용", key=f"select_{bg_id}"):
+                            progress["selected_background"] = bg_id
+                            save_progress(progress)
+                            st.success(f"{bg['name']}으로 변경되었습니다!")
+                            st.rerun()
+
+    with col_right:
+        st.subheader("🆕 구매 가능한 배경")
+        for bg_id, bg in BACKGROUNDS.items():
+            if bg_id not in owned and bg_id != "default":
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.markdown(f"**{bg['name']}**")
+                    st.caption(bg['description'])
+                    st.caption(f"💰 가격: {bg['price']}G")
+                with col2:
+                    if gold >= bg['price']:
+                        if st.button("구매", key=f"buy_{bg_id}"):
+                            progress["gold"] -= bg['price']
+                            progress["owned_backgrounds"].append(bg_id)
+                            save_progress(progress)
+                            st.success(f"{bg['name']}을(를) 구매했습니다!")
+                            st.rerun()
+                    else:
+                        st.button("구매", disabled=True, key=f"buy_disabled_{bg_id}")
+                        st.caption(f"💬 {bg['price'] - gold}G 더 필요")
+
+                st.divider()

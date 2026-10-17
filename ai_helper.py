@@ -142,8 +142,12 @@ def run_code(code: str, timeout: float = 5.0) -> tuple[bool, str]:
 
 
 def outputs_match(actual: str, expected: str) -> bool:
-    norm = lambda s: "\n".join(line.rstrip() for line in s.strip().splitlines())
-    return norm(actual) == norm(expected)
+    """출력값 비교: 띄어쓰기, 줄바꿈, 대소문자 차이 무시"""
+    def normalize(s: str) -> str:
+        # 공백/줄바꿈 정규화: 여러 공백을 하나로, 빈 줄 제거, 소문자 통일
+        text = " ".join(s.strip().split())
+        return text.lower()
+    return normalize(actual) == normalize(expected)
 
 
 def grade_solution(problem: SubjectiveProblem, code: str) -> Grading:

@@ -210,6 +210,13 @@ def add_xp(amount: int, gold: int = 100):
         st.session_state.daily_goal_achieved = True
 
 
+def normalize_output(text: str) -> str:
+    """출력값을 정규화: 공백, 줄바꿈, 대소문자 무시"""
+    # 공백/줄바꿈 정규화 (여러 공백을 하나로, 빈 줄 제거)
+    text = " ".join(text.split())
+    return text.lower().strip()
+
+
 def subjective_xp(difficulty: str, grade: int) -> int:
     # 1등급 = 100%, 9등급 = 약 11%
     return round(BASE_XP["주관식"][difficulty] * (10 - grade) / 9)
@@ -1139,11 +1146,12 @@ elif st.session_state.view == "tutorial":
 
                             if validation_type == "output_contains" and ok:
                                 keywords = step_data.get('validation_keywords', [])
-                                is_correct = all(kw in output for kw in keywords)
+                                normalized_output = normalize_output(output)
+                                is_correct = all(normalize_output(kw) in normalized_output for kw in keywords)
 
                             elif validation_type == "exact_output" and ok:
                                 expected = step_data.get('expected_output', '')
-                                is_correct = output.strip() == expected.strip()
+                                is_correct = normalize_output(output) == normalize_output(expected)
 
                             if is_correct:
                                 st.success("✅ 정답입니다!")

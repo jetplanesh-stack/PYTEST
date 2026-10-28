@@ -360,7 +360,19 @@ if not st.session_state.get("logged_in") or st.session_state.user is None:
                 st.error(f"❌ '{signup_nickname}'은 이미 사용 중인 닉네임입니다.")
             else:
                 if auth.create_user(signup_nickname, signup_password):
-                    st.success("✅ 회원가입 성공! 로그인해주세요.")
+                    st.success("✅ 회원가입 성공!")
+                    st.session_state.user = signup_nickname
+                    progress = auth.load_user_progress(signup_nickname)
+                    progress = check_and_reset_daily_progress(progress)
+                    st.session_state.progress = progress
+                    st.session_state.logged_in = True
+
+                    progress_survey = survey.load_progress_survey(signup_nickname)
+                    if not progress_survey:
+                        st.session_state.view = "progress_survey"
+                    else:
+                        st.session_state.view = "dashboard"
+
                     st.rerun()
                 else:
                     st.error("회원가입에 실패했습니다.")
@@ -864,8 +876,14 @@ elif st.session_state.view == "problem":
     p = current["data"]
     st.subheader(f"[{current['kind']} · {current['difficulty']}] {p.title}")
     st.write(p.situation)
-    st.markdown("**목표 출력 (이 결과가 나오면 정답)**")
-    st.code(p.expected_output, language="text")
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown("**📋 목표 출력 (이 결과가 나오면 정답)**")
+    with col2:
+        st.caption("전체 예상 답변")
+
+    st.info(p.expected_output)
 
 
     def record(result: str, xp: int):
@@ -1500,6 +1518,8 @@ elif st.session_state.view == "shop":
                         if gold >= bg['price']:
                             if st.button("구매", key=f"buy_{bg_id}"):
                                 progress["gold"] -= bg['price']
+                                if "owned_backgrounds" not in progress:
+                                    progress["owned_backgrounds"] = []
                                 progress["owned_backgrounds"].append(bg_id)
                                 save_progress(progress)
                                 st.success(f"{bg['name']}을(를) 구매했습니다!")
@@ -1529,6 +1549,8 @@ elif st.session_state.view == "shop":
                 elif gold >= outfit['price']:
                     if st.button("구매", key=f"buy_outfit_{outfit_id}"):
                         progress["gold"] -= outfit['price']
+                        if "owned_outfits" not in progress:
+                            progress["owned_outfits"] = []
                         progress["owned_outfits"].append(outfit_id)
                         save_progress(progress)
                         st.success(f"{outfit['name']}을(를) 구매했습니다!")
@@ -1556,6 +1578,8 @@ elif st.session_state.view == "shop":
                 elif gold >= font['price']:
                     if st.button("구매", key=f"buy_font_{font_id}"):
                         progress["gold"] -= font['price']
+                        if "owned_fonts" not in progress:
+                            progress["owned_fonts"] = []
                         progress["owned_fonts"].append(font_id)
                         save_progress(progress)
                         st.success(f"{font['name']}을(를) 구매했습니다!")
@@ -1618,6 +1642,8 @@ elif st.session_state.view == "shop":
                     elif gold >= 6000:
                         if st.button("프리미엄 배경 구매 (6000G)", key=f"buy_premium_{char_id}"):
                             progress["gold"] -= 6000
+                            if "owned_backgrounds" not in progress:
+                                progress["owned_backgrounds"] = []
                             progress["owned_backgrounds"].append("moving_ultra")
                             progress["selected_background"] = "moving_ultra"
                             save_progress(progress)

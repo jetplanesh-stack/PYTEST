@@ -142,10 +142,13 @@ def run_code(code: str, timeout: float = 5.0) -> tuple[bool, str]:
 
 
 def outputs_match(actual: str, expected: str) -> bool:
-    """출력값 비교: 띄어쓰기, 줄바꿈, 대소문자 차이 무시"""
+    """출력값 비교: 띄어쓰기, 줄바꿈, 대소문자, 앞뒤 공백 차이 무시"""
     def normalize(s: str) -> str:
         # 공백/줄바꿈 정규화: 여러 공백을 하나로, 빈 줄 제거, 소문자 통일
-        text = " ".join(s.strip().split())
+        # 탭도 공백으로 변환
+        text = s.replace('\t', ' ').strip()
+        # 연속된 공백들을 하나의 공백으로
+        text = ' '.join(text.split())
         return text.lower()
     return normalize(actual) == normalize(expected)
 

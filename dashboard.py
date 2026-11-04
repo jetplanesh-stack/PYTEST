@@ -153,12 +153,16 @@ def show_welcome_dashboard(nickname: str, progress: dict, save_progress=None):
         if st.button("👨‍🎓 학생용", use_container_width=True,
                      type="primary" if current_mode == "student" else "secondary"):
             progress["mode"] = "student"
+            if save_progress:
+                save_progress(progress)
             st.rerun()
 
     with col_mode2:
         if st.button("👨‍💼 전문가용", use_container_width=True,
                      type="primary" if current_mode == "expert" else "secondary"):
             progress["mode"] = "expert"
+            if save_progress:
+                save_progress(progress)
             st.rerun()
 
     with col_mode3:
